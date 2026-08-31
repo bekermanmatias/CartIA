@@ -1533,11 +1533,15 @@ function ContentScreen({ onToast, onOpenGuest, publishedVideos, onPublishVideos,
   );
 }
 
-function AdminScreen({ onToast, clients, onCreateRestaurant }) {
+function AdminScreen({ onToast, clients, onCreateRestaurant, onLoadUsers, onCreateUser }) {
   const [query, setQuery] = useState("");
   const [creating, setCreating] = useState(false);
   const [draft, setDraft] = useState({ restaurantName: "", tagline: "", adminName: "", email: "", password: "" });
   const [saving, setSaving] = useState(false);
+  const [managedClient, setManagedClient] = useState(null);
+  const [users, setUsers] = useState([]);
+  const [userDraft, setUserDraft] = useState({ name: "", email: "", password: "", organizationRole: "", locationRole: "STAFF" });
+  const [userSaving, setUserSaving] = useState(false);
   const filtered = clients.filter((client) => client.name.toLowerCase().includes(query.toLowerCase()));
 
   const create = async (event) => {
@@ -1553,6 +1557,17 @@ function AdminScreen({ onToast, clients, onCreateRestaurant }) {
     } finally {
       setSaving(false);
     }
+  };
+  const manageUsers = async (client) => {
+    setManagedClient(client);
+    try { const data = await onLoadUsers(client.organizationId); setUsers(data.users || []); } catch (error) { onToast(error.message || "No se pudieron cargar los usuarios"); }
+  };
+  const createUser = async (event) => {
+    event.preventDefault(); setUserSaving(true);
+    try {
+      await onCreateUser(managedClient.organizationId, { ...userDraft, organizationRole: userDraft.organizationRole || undefined, locations: [{ locationId: managedClient.id, role: userDraft.locationRole }] });
+      const data = await onLoadUsers(managedClient.organizationId); setUsers(data.users || []); setUserDraft({ name: "", email: "", password: "", organizationRole: "", locationRole: "STAFF" }); onToast("Usuario creado correctamente");
+    } catch (error) { onToast(error.message || "No se pudo crear el usuario"); } finally { setUserSaving(false); }
   };
   return (
     <main className="screen secondary-screen">
@@ -1573,10 +1588,15 @@ function AdminScreen({ onToast, clients, onCreateRestaurant }) {
             <div><strong>{client.name}</strong><small>/{client.slug}</small></div>
             <span>{client.table_count} mesas · {client.dish_count} platos</span>
             <span className={`status-chip ${client.status === "active" ? "active" : "setup"}`}>{client.status === "active" ? "Activo" : "Pausado"}</span>
-            <button type="button" onClick={() => onToast(`${client.name}: gestión avanzada estará en la siguiente etapa`)}>Gestionar</button>
+            <button type="button" onClick={() => manageUsers(client)}>Usuarios</button>
           </article>
         ))}
       </section>
+      {managedClient && <section className="client-table" aria-label="Usuarios de la empresa">
+        <div className="client-table-toolbar"><div><p className="eyebrow">EQUIPO · {managedClient.organizationName}</p><h2>Usuarios y accesos</h2></div><button className="secondary-button" type="button" onClick={() => setManagedClient(null)}>Cerrar</button></div>
+        {users.map((user) => <article key={user.id}><span className="client-avatar">{user.name.split(" ").map((part) => part[0]).join("").slice(0, 2)}</span><div><strong>{user.name}</strong><small>{user.email}</small></div><span>{user.organizationRole || user.locations?.[0]?.role || "Usuario de local"}</span><span className={`status-chip ${user.status === "ACTIVE" ? "active" : "setup"}`}>{user.status === "ACTIVE" ? "Activo" : "Inactivo"}</span></article>)}
+        <form className="dish-form" onSubmit={createUser}><h3>Crear usuario</h3><label>Nombre<input value={userDraft.name} onChange={(event) => setUserDraft((current) => ({ ...current, name: event.target.value }))} required /></label><label>Email<input type="email" value={userDraft.email} onChange={(event) => setUserDraft((current) => ({ ...current, email: event.target.value }))} required /></label><label>Contraseña<input type="password" minLength="10" value={userDraft.password} onChange={(event) => setUserDraft((current) => ({ ...current, password: event.target.value }))} required /></label><label>Rol<select value={userDraft.organizationRole} onChange={(event) => setUserDraft((current) => ({ ...current, organizationRole: event.target.value }))}><option value="">Usuario de local</option><option value="ADMIN">Organization Admin</option><option value="ANALYST">Analyst</option></select></label><button className="primary-button" type="submit" disabled={userSaving}>{userSaving ? "Creando…" : "Crear usuario"}</button></form>
+      </section>}
       {creating && <div className="dish-editor-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setCreating(false)}>
         <aside className="dish-editor client-create-modal" role="dialog" aria-modal="true" aria-label="Nuevo restaurante">
           <header><div><p className="eyebrow">ALTA MANUAL · CARTIA</p><h2>Nuevo restaurante</h2></div><button type="button" onClick={() => setCreating(false)} aria-label="Cerrar"><X size={20} /></button></header>
@@ -1862,6 +1882,8 @@ export function App() {
     const response = await cartiaApi.createRestaurant(draft, csrf);
     setClients((current) => [{ ...response.restaurant, status: "active", table_count: 0, dish_count: 0 }, ...current]);
   };
+  const loadOrganizationUsers = (organizationId) => cartiaApi.organizationUsers(organizationId);
+  const createOrganizationUser = (organizationId, user) => cartiaApi.createOrganizationUser(organizationId, user, csrf);
   const selectLocation = async (locationId) => {
     if (!connected || !locationId || locationId === activeLocationId) return;
     const response = await cartiaApi.selectLocation(locationId, csrf);
@@ -1939,7 +1961,7 @@ export function App() {
   else if (screen === "mesas") content = <MesasScreen onToast={showToast} tables={tables} requests={requests} onAddTable={addTable} onResolveRequest={resolveRequest} />;
   else if (screen === "estilo") content = <StyleScreen onToast={showToast} serviceOptions={serviceOptions} onServiceOptions={setServiceOptions} visualTheme={visualTheme} onVisualTheme={setVisualTheme} onOpenGuest={() => navigate("menu")} restaurant={restaurant} onUploadLogo={uploadLogo} />;
   else if (screen === "contenido") content = <ContentScreen onToast={showToast} onOpenGuest={() => navigate("menu")} publishedVideos={publishedVideos} onPublishVideos={setPublishedVideos} menuDishes={menuDishes} connected={connected} onUploadVideo={uploadVideo} />;
-  else if (screen === "admin") content = <AdminScreen onToast={showToast} clients={clients} onCreateRestaurant={createRestaurant} />;
+  else if (screen === "admin") content = <AdminScreen onToast={showToast} clients={clients} onCreateRestaurant={createRestaurant} onLoadUsers={loadOrganizationUsers} onCreateUser={createOrganizationUser} />;
   else content = <Dashboard period={period} onPeriod={setPeriod} onImprove={() => setDrawer("improve")} analytics={analytics} />;
 
   return (

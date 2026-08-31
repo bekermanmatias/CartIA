@@ -20,22 +20,22 @@ Cada tarea debe cerrarse con evidencia: código, test, comando ejecutado o verif
 | terminado | Docker de producción | Existen imágenes separadas para API Nest y frontend Nginx, con PostgreSQL privado y media persistente | Mantener healthchecks y revisar HTTPS en VPS | Docker Compose |
 | terminado | Docker de desarrollo | `docker-compose.dev.yml` monta código, ejecuta Nest watch y Vite HMR | Usar `npm run dev:docker` durante desarrollo | Docker Desktop |
 | en progreso | Autenticación y sesión | Login, logout, `/me`, cookie HttpOnly, CSRF, expiración y rate limit tienen tests | Agregar tests de sesión/CSRF y prohibir secreto default en producción | Prisma, PostgreSQL |
-| pendiente | Permisos administrativos | Cada endpoint administrativo valida usuario, organización, sucursal y rol | Crear guard/decorator de autorización centralizado | Auth |
-| pendiente | Organizaciones y sucursales | Un usuario puede pertenecer a varias organizaciones/sucursales y cambiar de contexto | Agregar endpoints de administración y selector de sucursal | Permisos |
+| en progreso | Permisos administrativos | Cada endpoint administrativo valida usuario, organización, sucursal y rol | Reemplazar las comprobaciones puntuales por una matriz de permisos y guards reutilizables | Auth |
+| en progreso | Organizaciones y sucursales | Un usuario puede pertenecer a varias organizaciones/sucursales y cambiar de contexto | Conectar la gestión visual de usuarios y locales en React | Permisos |
 | en progreso | Aislamiento multi-tenant | Ningún usuario, QR o endpoint puede leer/modificar datos de otra sucursal | Cubrir queries con tests de dos organizaciones y dos locales | Permisos, modelo Prisma |
 | pendiente | Uploads de media | Imágenes, MP4 y logos validan MIME, extensión, tamaño y contenido; se guardan por sucursal | Implementar `StorageService` filesystem con URLs `/uploads/...` | Volumen media |
 | pendiente | Auditoría | Crear, actualizar, archivar, login y resolución generan `AuditLog` con actor y sucursal | Incorporar servicio de auditoría a comandos administrativos | Permisos |
 | terminado | Migración y seed inicial | Prisma aplica migración versionada y crea usuario demo idempotente | Ejecutar también seed en una instalación limpia de CI/VPS | PostgreSQL |
-| pendiente | Suite de pruebas | CI ejecuta unitarias, integración, aislamiento y E2E sin pasos manuales | Crear fixtures y tests de API con PostgreSQL | CI |
+| en progreso | Suite de pruebas | CI ejecuta unitarias, integración, aislamiento y E2E sin pasos manuales | Crear fixtures y tests negativos de dos organizaciones con PostgreSQL | CI |
 | en progreso | CI/CD | PR y `main` ejecutan validaciones; `main` publica imágenes SHA y despliega por SSH | Probar workflow en GitHub y completar provisioning VPS | Secrets GitHub, VPS |
 
 ## P1 — Operación multi-local
 
 | Estado | Tarea | Criterio de aceptación | Próxima acción | Dependencias |
 |---|---|---|---|---|
-| pendiente | Acceso a varias sucursales | Un usuario con dos membresías puede consultar y operar ambas sin cruzar datos | Definir contexto activo de sucursal en sesión o header | Permisos |
-| pendiente | Selector de sucursal | El panel muestra las sucursales permitidas y cambia el contexto sin relogin | Adaptar bootstrap y navegación del panel | API de memberships |
-| pendiente | Roles | OWNER, ADMIN, MANAGER, STAFF, VIEWER tienen permisos explícitos y testeados | Publicar matriz de permisos en la documentación | Auth |
+| en progreso | Acceso a varias sucursales | Un usuario con dos membresías puede consultar y operar ambas sin cruzar datos | Probar cambio de contexto con dos locales reales | Permisos |
+| en progreso | Selector de sucursal | El panel muestra las sucursales permitidas y cambia el contexto sin relogin | Completar estados visuales y recarga del panel | API de memberships |
+| en progreso | Roles | OWNER, ADMIN, MANAGER, STAFF, VIEWER tienen permisos explícitos y testeados | Publicar matriz de permisos y aplicarla a cada endpoint | Auth |
 | pendiente | Gestión completa de carta | Menús, categorías, platos, precios, disponibilidad y orden se gestionan por sucursal | Completar CRUD y validaciones | Aislamiento |
 | en progreso | Mesas y QR | Cada mesa tiene token aleatorio no adivinable y todas las operaciones validan slug/token/estado | Agregar rotación y revocación de tokens | Prisma |
 | en progreso | Flujo operativo en tiempo real | QR → menú → pedido/llamado → SSE → resolución funciona en E2E | Crear escenario automatizado de punta a punta | SSE, tests |
@@ -68,6 +68,13 @@ Cada tarea debe cerrarse con evidencia: código, test, comando ejecutado o verif
 7. Validar el pipeline completo de CI/CD y el procedimiento de backup/rollback.
 
 ## Registro de sesiones
+
+### 2026-08-31 — P0 matriz de permisos y aislamiento
+
+- Estado: `en progreso`.
+- Cambios: `AccessService` centraliza acciones de permiso y validaciones de organización, sucursal y contexto activo; los servicios de CartIA y organizaciones consumen esa autorización; el panel React incorpora gestión de usuarios; se agregaron pruebas unitarias del servicio de acceso.
+- Verificación: `npm --prefix backend run typecheck` correcto; `npm --prefix backend test -- --runInBand` correcto (1 suite, 5 tests); Docker dev verificado con API y frontend activos, incluyendo Nest watch y Vite HMR.
+- Pendientes descubiertos: completar cobertura de controllers, fixtures de dos organizaciones, pruebas de CSRF/sesión, E2E y aplicar autorización a todas las rutas operativas.
 
 Cada sesión de trabajo debe registrar:
 

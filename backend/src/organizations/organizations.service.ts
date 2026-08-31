@@ -51,14 +51,14 @@ export class OrganizationsService {
   }
 
   async detail(userId: string, organizationId: string) {
-    await this.access.organization(userId, organizationId);
+    await this.access.requireOrganization(userId, organizationId, 'organization.read');
     const organization = await this.prisma.organization.findUnique({ where: { id: organizationId }, include: { locations: { include: { memberships: { include: { user: true } } } } } });
     if (!organization) throw new NotFoundException('Empresa no encontrada.');
     return { ok: true, organization: { ...organization, locations: organization.locations.map((location) => ({ ...this.locationSummary(location), users: location.memberships.map((membership) => ({ id: membership.user.id, name: membership.user.name, email: membership.user.email, role: membership.role })) })) } };
   }
 
   async addLocation(userId: string, organizationId: string, input: { name?: string; slug?: string; address?: string }) {
-    await this.access.organization(userId, organizationId, ['OWNER', 'ADMIN']);
+    await this.access.requireOrganization(userId, organizationId, 'organization.update');
     if (!input.name?.trim()) throw new BadRequestException('El local necesita un nombre.');
     try {
       const location = await this.prisma.location.create({ data: { organizationId, name: input.name.trim(), slug: slugify(input.slug || input.name), address: input.address?.trim() || '' }, });
@@ -69,21 +69,21 @@ export class OrganizationsService {
   }
 
   async updateLocation(userId: string, locationId: string, input: { name?: string; address?: string; status?: 'ACTIVE' | 'PAUSED' }) {
-    const location = await this.access.location(userId, locationId, ['MANAGER']);
+    const location = await this.access.requireLocation(userId, locationId, 'location.manage');
     const updated = await this.prisma.location.update({ where: { id: location.id }, data: { name: input.name?.trim() || undefined, address: input.address?.trim(), status: input.status } });
     await this.audit({ organizationId: location.organizationId, locationId, userId, action: 'UPDATE', entityType: 'Location', entityId: locationId });
     return { ok: true, location: this.locationSummary(updated) };
   }
 
   async users(userId: string, organizationId: string) {
-    await this.access.organization(userId, organizationId);
+    await this.access.requireOrganization(userId, organizationId, 'organization.users.read');
     const users = await this.prisma.user.findMany({ where: { organizationMemberships: { some: { organizationId } } }, include: { organizationMemberships: { where: { organizationId } }, locationMemberships: { include: { location: true } } }, orderBy: { name: 'asc' } });
     return { ok: true, users: users.map((user) => ({ id: user.id, name: user.name, email: user.email, status: user.status, organizationRole: user.organizationMemberships[0]?.role ?? null, locations: user.locationMemberships.filter((item) => item.location.organizationId === organizationId).map((item) => ({ id: item.locationId, name: item.location.name, role: item.role })) })) };
   }
 
   async createUser(actorId: string, organizationId: string, input: { name?: string; email?: string; password?: string; organizationRole?: OrganizationRole; locations?: { locationId: string; role?: LocationRole }[] }) {
     const actor = await this.access.actor(actorId);
-    if (!this.access.canManageUsers(actor, organizationId)) throw new ForbiddenException('No puedes crear usuarios en esta empresa.');
+    await this.access.requireOrganization(actorId, organizationId, 'organization.users.manage');
     const name = input.name?.trim(); const email = input.email?.trim().toLowerCase();
     if (!name || !email || !input.password || input.password.length < 10) throw new BadRequestException('Nombre, email y contraseña de al menos 10 caracteres son obligatorios.');
     const organizationRole = input.organizationRole && ['OWNER', 'ADMIN', 'ANALYST'].includes(input.organizationRole) ? input.organizationRole : undefined;
@@ -103,7 +103,8 @@ export class OrganizationsService {
 
   async updateUser(actorId: string, userId: string, input: { name?: string; password?: string; status?: UserStatus; organizationId?: string; organizationRole?: OrganizationRole; locations?: { locationId: string; role?: LocationRole }[] }) {
     const actor = await this.access.actor(actorId); const organizationId = input.organizationId;
-    if (!organizationId || !this.access.canManageUsers(actor, organizationId)) throw new ForbiddenException('No puedes modificar este usuario.');
+    if (!organizationId) throw new ForbiddenException('La organización es obligatoria.');
+    await this.access.requireOrganization(actorId, organizationId, 'organization.users.manage');
     const existing = await this.prisma.user.findFirst({ where: { id: userId, organizationMemberships: { some: { organizationId } } } });
     if (!existing) throw new NotFoundException('Usuario no encontrado.');
     if (input.organizationRole === 'OWNER' && !actor.platformAdmin) throw new ForbiddenException('Solo CartIA puede asignar propietarios.');

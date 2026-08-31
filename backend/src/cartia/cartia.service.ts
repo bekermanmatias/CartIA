@@ -4,13 +4,14 @@ import { randomBytes, createHash } from 'crypto';
 import { Subject } from 'rxjs';
 import { slugify } from '../common/security';
 import { PrismaService } from '../prisma/prisma.service';
+import { AccessService, Permission } from '../access/access.service';
 
 type PublicContext = { location: { id: string; slug: string; name: string; tagline: string | null; logoPath: string | null; themePrimary: string; themeAccent: string; themePaper: string; themeName: string; serviceWaiter: boolean; serviceBill: boolean }; table: { id: string; label: string } };
 
 @Injectable()
 export class CartiaService {
   readonly events = new Subject<{ type: string; locationId: string; data: Record<string, unknown> }>();
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService, private readonly access: AccessService) {}
 
   private imagePath(dish: { media: { path: string; kind: string }[] }) {
     return dish.media.find((item) => item.kind === 'IMAGE')?.path ?? null;
@@ -25,10 +26,11 @@ export class CartiaService {
     return { databaseId: dish.id, id: dish.publicId, name: dish.name, detail: dish.description, priceCents: dish.priceCents, price: `$${Math.round(dish.priceCents / 100).toLocaleString('es-AR')}`, image: this.imagePath(dish), badge: dish.badge ?? '', category: dish.category?.name ?? 'Principales', available: dish.available, video: this.video(dish) };
   }
 
-  private async locationForUser(userId: string, locationId?: string) {
-    const membership = await this.prisma.locationMembership.findFirst({ where: { userId, ...(locationId ? { locationId } : {}) }, include: { location: true } });
-    if (!membership || membership.location.status !== 'ACTIVE') throw new ForbiddenException('No tienes una sucursal activa asignada.');
-    return membership.location;
+  private async locationForUser(userId: string, locationId?: string, permission: Permission = 'location.read') {
+    const actor = await this.access.actor(userId);
+    const selected = locationId ?? actor.locationMemberships[0]?.locationId;
+    if (!selected) throw new ForbiddenException('No tienes una sucursal activa asignada.');
+    return this.access.requireLocation(userId, selected, permission);
   }
 
   private async context(slug: string, token: string): Promise<PublicContext> {
@@ -40,7 +42,7 @@ export class CartiaService {
   async health() { await this.prisma.$queryRaw`SELECT 1`; return { ok: true, database: true, service: 'cartia-api' }; }
 
   async bootstrap(userId: string, locationId?: string) {
-    const location = await this.locationForUser(userId, locationId);
+    const location = await this.locationForUser(userId, locationId, 'location.read');
     const menu = await this.prisma.menu.findFirst({ where: { locationId: location.id, active: true }, include: { dishes: { include: { category: true, media: true }, orderBy: { sortOrder: 'asc' } } } });
     const tables = await this.prisma.table.findMany({ where: { locationId: location.id }, orderBy: { createdAt: 'asc' } });
     return { ok: true, restaurant: { id: location.id, name: location.name, slug: location.slug, tagline: location.tagline, logo: location.logoPath }, dishes: (menu?.dishes ?? []).map((dish) => this.formatDish(dish)), tables: tables.map((table) => ({ id: table.id, label: table.label, token: table.publicToken, active: table.active, menuUrl: `/?r=${location.slug}&t=${table.publicToken}#menu` })), serviceOptions: { waiter: location.serviceWaiter, bill: location.serviceBill }, visualTheme: { primary: location.themePrimary, accent: location.themeAccent, paper: location.themePaper, name: location.themeName } };
@@ -54,20 +56,20 @@ export class CartiaService {
   }
 
   async createTable(userId: string, label: string, locationId?: string) {
-    const location = await this.locationForUser(userId, locationId);
+    const location = await this.locationForUser(userId, locationId, 'tables.manage');
     if (!label.trim() || label.length > 60) throw new BadRequestException('Escribe un nombre de mesa válido.');
     const table = await this.prisma.table.create({ data: { locationId: location.id, label: label.trim(), publicToken: randomBytes(32).toString('hex') } });
     return { ok: true, table: { id: table.id, label: table.label, token: table.publicToken, active: table.active, menuUrl: `/?r=${location.slug}&t=${table.publicToken}#menu` } };
   }
 
   async archiveTable(userId: string, id: string, locationId?: string) {
-    const location = await this.locationForUser(userId, locationId);
+    const location = await this.locationForUser(userId, locationId, 'tables.manage');
     await this.prisma.table.updateMany({ where: { id, locationId: location.id }, data: { active: false, archivedAt: new Date() } });
     return { ok: true };
   }
 
   async requests(userId: string, locationId?: string) {
-    const location = await this.locationForUser(userId, locationId);
+    const location = await this.locationForUser(userId, locationId, 'requests.read');
     const [service, orders] = await Promise.all([
       this.prisma.serviceRequest.findMany({ where: { locationId: location.id, status: 'PENDING' }, include: { table: true }, orderBy: { createdAt: 'asc' } }),
       this.prisma.order.findMany({ where: { locationId: location.id, status: 'NEW' }, include: { table: true, items: true }, orderBy: { createdAt: 'asc' } }),
@@ -76,7 +78,7 @@ export class CartiaService {
   }
 
   async resolveRequest(userId: string, id: string, kind: string, locationId?: string) {
-    const location = await this.locationForUser(userId, locationId);
+    const location = await this.locationForUser(userId, locationId, 'requests.resolve');
     if (kind === 'order') {
       await this.prisma.order.updateMany({ where: { id, locationId: location.id, status: 'NEW' }, data: { status: 'ACCEPTED' } });
       this.events.next({ type: 'order.updated', locationId: location.id, data: { id, status: 'ACCEPTED' } });
@@ -88,14 +90,14 @@ export class CartiaService {
   }
 
   async saveSettings(userId: string, input: { serviceOptions?: { waiter?: boolean; bill?: boolean }; visualTheme?: { primary?: string; accent?: string; paper?: string; name?: string } }, locationId?: string) {
-    const location = await this.locationForUser(userId, locationId);
+    const location = await this.locationForUser(userId, locationId, 'location.manage');
     const color = (value: string | undefined, fallback: string) => /^#[0-9a-f]{6}$/i.test(value ?? '') ? value!.toLowerCase() : fallback;
     await this.prisma.location.update({ where: { id: location.id }, data: { serviceWaiter: Boolean(input.serviceOptions?.waiter), serviceBill: Boolean(input.serviceOptions?.bill), themePrimary: color(input.visualTheme?.primary, location.themePrimary), themeAccent: color(input.visualTheme?.accent, location.themeAccent), themePaper: color(input.visualTheme?.paper, location.themePaper), themeName: input.visualTheme?.name?.trim().slice(0, 80) || location.themeName } });
     return { ok: true };
   }
 
   async saveDish(userId: string, input: { databaseId?: string; id?: string; name?: string; detail?: string; priceCents?: number; price?: string; badge?: string; category?: string; available?: boolean }, locationId?: string) {
-    const location = await this.locationForUser(userId, locationId);
+    const location = await this.locationForUser(userId, locationId, 'menu.manage');
     const name = input.name?.trim();
     if (!name) throw new BadRequestException('El plato necesita un nombre.');
     const menu = await this.prisma.menu.findFirstOrThrow({ where: { locationId: location.id, active: true } });
@@ -153,7 +155,7 @@ export class CartiaService {
   }
 
   async analytics(userId: string, days = 7, locationId?: string) {
-    const location = await this.locationForUser(userId, locationId);
+    const location = await this.locationForUser(userId, locationId, 'analytics.read');
     const since = new Date(Date.now() - ([1, 7, 30].includes(days) ? days : 7) * 86_400_000);
     const events = await this.prisma.analyticsEvent.groupBy({ by: ['type'], where: { locationId: location.id, createdAt: { gte: since } }, _count: true });
     const count = (type: AnalyticsEventType) => events.find((event) => event.type === type)?._count ?? 0;
@@ -161,7 +163,7 @@ export class CartiaService {
   }
 
   async streamFor(userId: string, locationId?: string) {
-    const location = await this.locationForUser(userId, locationId);
+    const location = await this.locationForUser(userId, locationId, 'requests.read');
     return { locationId: location.id, stream: this.events.asObservable() };
   }
 

@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { CartiaController } from './cartia.controller';
 import { CartiaService } from './cartia.service';
+import { AccessModule } from '../access/access.module';
 
-@Module({ controllers: [CartiaController], providers: [CartiaService] })
+@Module({ imports: [AccessModule], controllers: [CartiaController], providers: [CartiaService] })
 export class CartiaModule {}
