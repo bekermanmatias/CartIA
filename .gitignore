@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.env
+api/config.php
+api/storage/
+uploads/*
+!uploads/.htaccess
+!uploads/index.html
+

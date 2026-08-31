@@ -1,0 +1,1944 @@
+import { useEffect, useMemo, useRef, useState } from "react";
+import QRCode from "qrcode";
+import { cartiaApi, getPublicParams } from "./api.js";
+import {
+  ArrowLeft,
+  BellSimple,
+  CaretDown,
+  ChartLineUp,
+  Check,
+  CheckCircle,
+  Clock,
+  CloudArrowUp,
+  DeviceMobile,
+  DownloadSimple,
+  Eye,
+  FileVideo,
+  ForkKnife,
+  ImageSquare,
+  MagnifyingGlass,
+  MagicWand,
+  Palette,
+  PencilSimple,
+  Play,
+  Plus,
+  QrCode,
+  SpinnerGap,
+  Receipt,
+  SpeakerHigh,
+  SpeakerSlash,
+  SlidersHorizontal,
+  SquaresFour,
+  Storefront,
+  Trash,
+  UploadSimple,
+  UsersThree,
+  VideoCamera,
+  WarningCircle,
+  X,
+} from "@phosphor-icons/react";
+
+const isDemoRuntime = import.meta.env.DEV || import.meta.env.VITE_DEMO_MODE === "true";
+
+const dishes = [
+  {
+    rank: "1",
+    name: "Milanesa napolitana",
+    detail: "Ternera · tomate · mozzarella",
+    image: "/assets/food/milanesa.png",
+    attention: "18,4 s",
+    chosen: "12%",
+    bar: 86,
+    tone: "warning",
+  },
+  {
+    rank: "2",
+    name: "Ravioles de calabaza",
+    detail: "Manteca noisette · salvia",
+    image: "/assets/food/ravioles.png",
+    attention: "15,1 s",
+    chosen: "28%",
+    bar: 72,
+    tone: "good",
+  },
+  {
+    rank: "3",
+    name: "Burrata de la casa",
+    detail: "Tomates asados · albahaca",
+    image: "/assets/food/burrata.png",
+    attention: "12,8 s",
+    chosen: "34%",
+    bar: 61,
+    tone: "good",
+  },
+  {
+    rank: "4",
+    name: "Tiramisú clásico",
+    detail: "Mascarpone · café · cacao",
+    image: "/assets/food/tiramisu.png",
+    attention: "9,7 s",
+    chosen: "21%",
+    bar: 46,
+    tone: "neutral",
+  },
+  {
+    rank: "5",
+    name: "Limonada de la casa",
+    detail: "Limón · menta · jengibre",
+    image: "/assets/food/limonada.png",
+    attention: "7,3 s",
+    chosen: "18%",
+    bar: 34,
+    tone: "neutral",
+  },
+];
+
+const navItems = [
+  { id: "inicio", label: "Inicio", icon: SquaresFour },
+  { id: "carta", label: "Carta", icon: ForkKnife },
+  { id: "analitica", label: "Analítica", icon: ChartLineUp },
+  { id: "mesas", label: "Mesas", icon: BellSimple },
+  { id: "estilo", label: "Estilo", icon: Palette },
+  { id: "contenido", label: "Contenido IA", icon: MagicWand },
+];
+
+const initialMenuDishes = [
+  {
+    id: "milanesa",
+    name: "Milanesa napolitana",
+    detail: "Ternera tierna, tomate de estación y mozzarella gratinada",
+    price: "$17.900",
+    image: "/assets/food/milanesa.png",
+    badge: "Más mirado",
+    category: "Principales",
+    available: true,
+  },
+  {
+    id: "tartar",
+    name: "Tartar de atún rojo",
+    detail: "Aguacate, sésamo tostado y ponzu cítrico",
+    price: "$18.900",
+    image: "/assets/food/tartar-atun.png",
+    badge: "Favorito",
+    category: "Entradas",
+    available: true,
+  },
+  {
+    id: "pulpo",
+    name: "Pulpo a la brasa",
+    detail: "Crema de patata, pimentón y aceite verde",
+    price: "$21.500",
+    image: "/assets/food/pulpo.png",
+    badge: "",
+    category: "Principales",
+    available: true,
+  },
+  {
+    id: "ravioles",
+    name: "Ravioles de calabaza",
+    detail: "Manteca noisette, salvia y avellanas",
+    price: "$16.800",
+    image: "/assets/food/ravioles.png",
+    badge: "Vegetariano",
+    category: "Principales",
+    available: true,
+  },
+  {
+    id: "burrata",
+    name: "Burrata de la casa",
+    detail: "Tomates asados, albahaca fresca y aceite de oliva extra virgen",
+    price: "$14.900",
+    image: "/assets/food/burrata.png",
+    badge: "Recomendado",
+    category: "Entradas",
+    available: true,
+  },
+  {
+    id: "tiramisu",
+    name: "Tiramisú clásico",
+    detail: "Mascarpone, café intenso y cacao amargo",
+    price: "$9.800",
+    image: "/assets/food/tiramisu.png",
+    badge: "",
+    category: "Postres",
+    available: true,
+  },
+];
+
+const demoDishVideos = {
+  milanesa: "/assets/video/milanesa-demo.mp4",
+  tartar: "/assets/video/tartar-atun-demo.mp4",
+  pulpo: "/assets/video/pulpo-demo.mp4",
+  ravioles: "/assets/video/ravioles-demo.mp4",
+  burrata: "/assets/video/burrata-demo.mp4",
+  tiramisu: "/assets/video/tiramisu-demo.mp4",
+};
+
+const initialPublishedVideos = Object.fromEntries(
+  initialMenuDishes.map((dish) => [
+    dish.id,
+    {
+      url: demoDishVideos[dish.id],
+      fileName: `${dish.id}-demo.mp4`,
+      size: 450000,
+      type: "video/mp4",
+      dish: dish.name,
+      dishId: dish.id,
+      duration: 6,
+      width: 720,
+      height: 1280,
+      published: true,
+      demo: true,
+    },
+  ]),
+);
+
+function useHashScreen() {
+  const readHash = () => window.location.hash.replace("#", "") || "inicio";
+  const [screen, setScreen] = useState(readHash);
+
+  useEffect(() => {
+    const handleHash = () => setScreen(readHash());
+    window.addEventListener("hashchange", handleHash);
+    return () => window.removeEventListener("hashchange", handleHash);
+  }, []);
+
+  const navigate = (next) => {
+    window.location.hash = next === "inicio" ? "" : next;
+    setScreen(next);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  return [screen, navigate];
+}
+
+function usePersistentState(key, initialValue) {
+  const [value, setValue] = useState(() => {
+    try {
+      const saved = window.localStorage.getItem(key);
+      return saved ? JSON.parse(saved) : initialValue;
+    } catch {
+      return initialValue;
+    }
+  });
+
+  useEffect(() => {
+    window.localStorage.setItem(key, JSON.stringify(value));
+  }, [key, value]);
+
+  return [value, setValue];
+}
+
+function AppHeader({ onRequests }) {
+  return (
+    <header className="app-header">
+      <a className="brand" href="#" aria-label="CartIA, ir al inicio">
+        <span>Cart</span>
+        <span className="brand-accent">IA</span>
+      </a>
+      <button className="restaurant-switch" type="button">
+        <span className="restaurant-mark">LO</span>
+        <span className="restaurant-copy">
+          <small>Restaurante</small>
+          <strong>La Oliva</strong>
+        </span>
+        <CaretDown size={15} weight="bold" />
+      </button>
+      <div className="header-spacer" />
+      <button className="pending-button" type="button" onClick={onRequests}>
+        <span className="pending-pulse" />
+        2 solicitudes pendientes
+      </button>
+      <button className="avatar-button" type="button" aria-label="Abrir perfil">
+        EA
+      </button>
+    </header>
+  );
+}
+
+function RequestRail({ onOpenRoom, onDismiss }) {
+  return (
+    <section className="request-rail" aria-label="Solicitudes de mesa">
+      <div className="request-live">
+        <span className="live-dot" />
+        Sala en vivo
+      </div>
+      <div className="request-item">
+        <span className="request-icon request-icon-waiter">
+          <BellSimple size={18} weight="fill" />
+        </span>
+        <span>
+          <strong>Mesa 12</strong>
+          <small>Llama al mozo · hace 1 min</small>
+        </span>
+      </div>
+      <div className="request-item">
+        <span className="request-icon request-icon-bill">
+          <Receipt size={18} weight="fill" />
+        </span>
+        <span>
+          <strong>Mesa 4</strong>
+          <small>Pidió la cuenta · hace 3 min</small>
+        </span>
+      </div>
+      <button className="rail-action" type="button" onClick={onOpenRoom}>
+        Abrir sala
+      </button>
+      <button className="icon-button rail-dismiss" type="button" onClick={onDismiss} aria-label="Ocultar aviso">
+        <X size={18} />
+      </button>
+    </section>
+  );
+}
+
+function Sidebar({ active, onNavigate }) {
+  return (
+    <aside className="sidebar">
+      <nav aria-label="Navegación principal">
+        {navItems.map(({ id, label, icon: Icon }) => (
+          <button
+            key={id}
+            type="button"
+            className={`nav-item ${active === id ? "active" : ""}`}
+            onClick={() => onNavigate(id)}
+          >
+            <Icon size={19} weight={active === id ? "fill" : "regular"} />
+            <span>{label}</span>
+          </button>
+        ))}
+      </nav>
+      <div className="sidebar-footer">
+        <button
+          type="button"
+          className={`nav-item ${active === "admin" ? "active" : ""}`}
+          onClick={() => onNavigate("admin")}
+        >
+          <UsersThree size={19} />
+          <span>Administración</span>
+        </button>
+        <div className="plan-card">
+          <span className="plan-label">Plan Estudio</span>
+          <strong>Tu carta trabaja por vos</strong>
+          <small>Próxima renovación · 18 ago</small>
+        </div>
+      </div>
+    </aside>
+  );
+}
+
+function BottomNav({ active, onNavigate }) {
+  const mobileItems = navItems.slice(0, 5);
+  return (
+    <nav className="bottom-nav" aria-label="Navegación móvil">
+      {mobileItems.map(({ id, label, icon: Icon }) => (
+        <button
+          key={id}
+          className={active === id ? "active" : ""}
+          type="button"
+          onClick={() => onNavigate(id)}
+        >
+          <Icon size={20} weight={active === id ? "fill" : "regular"} />
+          <span>{label}</span>
+        </button>
+      ))}
+    </nav>
+  );
+}
+
+function Dashboard({ period, onPeriod, onImprove, analytics }) {
+  const hasRealData = analytics?.dishes?.some((dish) => dish.views > 0);
+  const maxAttention = Math.max(1, ...(analytics?.dishes || []).map((dish) => dish.averageSeconds));
+  const rankedDishes = hasRealData ? analytics.dishes.slice(0, 5).map((dish, index) => ({
+    rank: String(index + 1),
+    name: dish.name,
+    detail: dish.detail,
+    image: dish.image,
+    attention: `${dish.averageSeconds.toLocaleString("es-AR")} s`,
+    chosen: `${dish.choiceRate}%`,
+    bar: Math.max(5, Math.round((dish.averageSeconds / maxAttention) * 100)),
+    tone: dish.choiceRate >= 25 ? "good" : dish.choiceRate < 15 ? "warning" : "neutral",
+  })) : dishes;
+  const leadDish = rankedDishes[0];
+  return (
+    <main className="screen dashboard-screen">
+      <section className="screen-heading">
+        <div>
+          <p className="eyebrow">HOY · 13:42</p>
+          <h1>Qué está mirando tu salón</h1>
+          <p className="heading-copy">
+            Insights de atención y elección de tus platos
+            <span>{hasRealData ? `${analytics.kpis.scans} escaneos · ${analytics.kpis.orders} pedidos enviados` : "Aún sin actividad · vista de ejemplo"}</span>
+          </p>
+        </div>
+        <PeriodSelect value={period} onChange={onPeriod} />
+      </section>
+
+      <div className="dashboard-grid">
+        <section className="attention-panel">
+          <div className="section-title-row">
+            <div>
+              <p className="eyebrow">ATENCIÓN EN TIEMPO REAL</p>
+              <h2>Platos que más detienen la mirada</h2>
+            </div>
+            <span className="live-pill"><span /> En vivo</span>
+          </div>
+          <div className="dish-table-header">
+            <span>PLATO</span>
+            <span>ATENCIÓN</span>
+            <span>ELECCIÓN</span>
+          </div>
+          <div className="dish-list">
+            {rankedDishes.map((dish) => (
+              <article className="dish-row" key={dish.name}>
+                <span className="dish-rank">{dish.rank}</span>
+                <img src={dish.image} alt="" loading="eager" />
+                <div className="dish-info">
+                  <strong>{dish.name}</strong>
+                  <small>{dish.detail}</small>
+                  <span className="attention-track">
+                    <span style={{ width: `${dish.bar}%` }} />
+                  </span>
+                </div>
+                <div className="dish-number">
+                  <strong>{dish.attention}</strong>
+                  <small>por visita</small>
+                </div>
+                <div className={`choice-number ${dish.tone}`}>
+                  <strong>{dish.chosen}</strong>
+                  <small>lo agrega</small>
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+
+        <aside className="insight-panel">
+          <div className="insight-kicker">
+            <MagicWand size={17} weight="fill" />
+            OPORTUNIDAD DETECTADA
+          </div>
+          <img className="insight-image" src={leadDish.image} alt={leadDish.name} loading="eager" fetchPriority="high" />
+          <p className="insight-stat">{leadDish.attention} de atención · {leadDish.chosen} de elección</p>
+          <h2>{leadDish.name} es el plato que más tiempo sostiene la mirada.</h2>
+          <p>
+            Compará su atención con la cantidad de agregados. Si se mira mucho y se elige poco, probá una toma más cercana o una descripción enfocada en textura.
+          </p>
+          <button className="primary-button full" type="button" onClick={onImprove}>
+            <MagicWand size={17} weight="fill" />
+            Mejorar este plato
+          </button>
+          <div className="impact-note">
+            <ChartLineUp size={18} />
+            <span>
+              <strong>Potencial estimado</strong>
+              +8 a 14 pedidos por semana
+            </span>
+          </div>
+        </aside>
+      </div>
+    </main>
+  );
+}
+
+function PeriodSelect({ value, onChange }) {
+  return (
+    <label className="period-select">
+      <Clock size={17} />
+      <select value={value} onChange={(event) => onChange(event.target.value)} aria-label="Período de analítica">
+        <option>Hoy</option>
+        <option>Últimos 7 días</option>
+        <option>Últimos 30 días</option>
+      </select>
+      <CaretDown size={14} weight="bold" />
+    </label>
+  );
+}
+
+function CartaScreen({ menuDishes, onMenuDishes, onToast, onOpenGuest, onSaveDish }) {
+  const [category, setCategory] = useState("Recomendados");
+  const [selected, setSelected] = useState(0);
+  const [view, setView] = useState("catalog");
+  const [editingDish, setEditingDish] = useState(null);
+  const availableDishes = menuDishes.filter((dish) => dish.available);
+  const featuredDish = availableDishes.find((dish) => dish.id === "burrata") || availableDishes[0];
+
+  const addItem = (name) => {
+    setSelected((value) => value + 1);
+    onToast(`${name} agregado a la selección`);
+  };
+
+  const openNewDish = () => {
+    setEditingDish({
+      id: `dish-${Date.now()}`,
+      name: "",
+      detail: "",
+      price: "$",
+      image: "/assets/food/burrata.png",
+      badge: "",
+      category: "Principales",
+      available: true,
+      isNew: true,
+    });
+  };
+
+  const saveDish = async (dish) => {
+    const normalized = { ...dish, name: dish.name.trim(), detail: dish.detail.trim(), isNew: undefined };
+    if (!normalized.name || !normalized.price) {
+      onToast("Completá el nombre y el precio");
+      return;
+    }
+    try {
+      const saved = await onSaveDish(normalized);
+      const nextDish = { ...normalized, ...saved };
+      onMenuDishes((current) => dish.isNew
+        ? [...current, nextDish]
+        : current.map((item) => item.id === dish.id ? nextDish : item));
+    } catch (error) {
+      onToast(error.message || "No se pudo guardar el plato");
+      return;
+    }
+    setEditingDish(null);
+    onToast(dish.isNew ? "Plato agregado a la carta" : "Cambios guardados en la carta");
+  };
+
+  const toggleAvailability = async (id) => {
+    const dish = menuDishes.find((item) => item.id === id);
+    if (!dish) return;
+    const nextDish = { ...dish, available: !dish.available };
+    onMenuDishes((current) => current.map((item) => item.id === id ? nextDish : item));
+    try {
+      await onSaveDish(nextDish);
+    } catch (error) {
+      onMenuDishes((current) => current.map((item) => item.id === id ? dish : item));
+      onToast(error.message || "No se pudo cambiar la disponibilidad");
+    }
+  };
+
+  return (
+    <main className="screen carta-screen">
+      <section className="carta-toolbar">
+        <div>
+          <p className="eyebrow">CARTA DIGITAL</p>
+          <h1>Tu menú, siempre al día</h1>
+          <p className="heading-copy">{availableDishes.length} platos publicados · los cambios se ven al instante.</p>
+        </div>
+        <div className="toolbar-actions">
+          <button className="secondary-button mobile-preview-button" type="button" onClick={onOpenGuest}>
+            <DeviceMobile size={17} />
+            Vista cliente
+          </button>
+          <button className="primary-button" type="button" onClick={openNewDish}>
+            <Plus size={17} weight="bold" />
+            Nuevo plato
+          </button>
+        </div>
+      </section>
+
+      <div className="carta-view-switch" role="tablist" aria-label="Vista de edición">
+        <button className={view === "catalog" ? "active" : ""} type="button" onClick={() => setView("catalog")}>
+          <ForkKnife size={17} /> Platos
+        </button>
+        <button className={view === "preview" ? "active" : ""} type="button" onClick={() => setView("preview")}>
+          <Eye size={17} /> Vista editorial
+        </button>
+        <button type="button" onClick={() => onToast("QR listo para compartir")}>
+          <QrCode size={17} /> Código QR
+        </button>
+      </div>
+
+      {view === "catalog" ? (
+        <section className="catalog-manager">
+          <div className="catalog-summary">
+            <div>
+              <span className="catalog-summary-icon"><ForkKnife size={21} weight="duotone" /></span>
+              <div><strong>{menuDishes.length}</strong><small>Platos totales</small></div>
+            </div>
+            <div>
+              <span className="catalog-summary-icon green"><CheckCircle size={21} weight="duotone" /></span>
+              <div><strong>{availableDishes.length}</strong><small>Visibles ahora</small></div>
+            </div>
+            <div>
+              <span className="catalog-summary-icon wine"><VideoCamera size={21} weight="duotone" /></span>
+              <div><strong>1</strong><small>Con video</small></div>
+            </div>
+          </div>
+          <div className="catalog-list">
+            <div className="catalog-list-heading">
+              <div><p className="eyebrow">CATÁLOGO</p><h2>Platos publicados</h2></div>
+              <span>Ordenados como los ve tu cliente</span>
+            </div>
+            {menuDishes.map((dish) => (
+              <article className={`catalog-dish ${!dish.available ? "is-hidden" : ""}`} key={dish.id}>
+                <img src={dish.image} alt={dish.name} />
+                <div className="catalog-dish-main">
+                  <div className="catalog-dish-tags">
+                    <span>{dish.category}</span>
+                    {dish.badge && <span>{dish.badge}</span>}
+                  </div>
+                  <h3>{dish.name}</h3>
+                  <p>{dish.detail}</p>
+                </div>
+                <strong className="catalog-price">{dish.price}</strong>
+                <label className="catalog-availability">
+                  <input type="checkbox" checked={dish.available} onChange={() => toggleAvailability(dish.id)} />
+                  <i />
+                  <span>{dish.available ? "Visible" : "Oculto"}</span>
+                </label>
+                <button className="catalog-edit" type="button" onClick={() => setEditingDish({ ...dish, isNew: false })}>
+                  <PencilSimple size={17} /> Editar
+                </button>
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : (
+      <div className="menu-preview-shell">
+        <section className="public-menu">
+          <header className="public-menu-header">
+            <div>
+              <span className="menu-monogram">LO</span>
+              <span>
+                <strong>La Oliva</strong>
+                <small>Cocina mediterránea</small>
+              </span>
+            </div>
+            <button className="menu-search" type="button" aria-label="Buscar en la carta">
+              <MagnifyingGlass size={19} />
+            </button>
+          </header>
+          <nav className="category-tabs" aria-label="Categorías de la carta">
+            {["Recomendados", "Entradas", "Principales", "Postres", "Bebidas"].map((item) => (
+              <button
+                type="button"
+                key={item}
+                className={category === item ? "active" : ""}
+                onClick={() => setCategory(item)}
+              >
+                {item}
+              </button>
+            ))}
+          </nav>
+
+          {featuredDish && <article className="menu-hero">
+            <img src={featuredDish.image} alt={featuredDish.name} />
+            <div className="hero-shade" />
+            <div className="hero-copy">
+              <span className="chef-badge">RECOMENDACIÓN DEL CHEF</span>
+              <h2>{featuredDish.name}</h2>
+              <p>{featuredDish.detail}</p>
+              <div>
+                <strong>{featuredDish.price}</strong>
+                <button type="button" onClick={() => addItem(featuredDish.name)}>
+                  <Plus size={17} weight="bold" /> Agregar
+                </button>
+              </div>
+            </div>
+            <button className="edit-hotspot" type="button" onClick={() => setEditingDish({ ...featuredDish, isNew: false })}><PencilSimple size={17} /> Editar destacado</button>
+          </article>}
+
+          <div className="menu-section-heading">
+            <div>
+              <p className="eyebrow">PARA EMPEZAR</p>
+              <h2>Elegidos para compartir</h2>
+            </div>
+            <span>{availableDishes.length} platos</span>
+          </div>
+
+          <div className="menu-card-grid">
+            {availableDishes.slice(0, 3).map((item) => (
+              <article className="menu-card" key={item.name}>
+                <div className="menu-card-image">
+                  <img src={item.image} alt={item.name} />
+                  {item.badge && <span>{item.badge}</span>}
+                  <button type="button" aria-label={`Editar ${item.name}`} onClick={() => setEditingDish({ ...item, isNew: false })}><PencilSimple size={16} /></button>
+                </div>
+                <div className="menu-card-copy">
+                  <h3>{item.name}</h3>
+                  <p>{item.detail}</p>
+                  <div>
+                    <strong>{item.price}</strong>
+                    <button type="button" onClick={() => addItem(item.name)} aria-label={`Agregar ${item.name}`}>
+                      <Plus size={18} weight="bold" />
+                    </button>
+                  </div>
+                </div>
+              </article>
+            ))}
+          </div>
+          <div className="guest-actions">
+            <button type="button"><BellSimple size={18} /> Llamar al mozo</button>
+            <button type="button"><Receipt size={18} /> Pedir la cuenta</button>
+            {selected > 0 && <span>{selected} en selección</span>}
+          </div>
+        </section>
+
+        <aside className="menu-side-panel">
+          <div className="side-panel-top">
+            <span className="status-dot" />
+            Carta publicada
+          </div>
+          <h2>Tu carta está haciendo su trabajo</h2>
+          <p>El diseño destaca lo que querés vender sin interrumpir la experiencia.</p>
+          <div className="side-stat">
+            <span>Interacción hoy</span>
+            <strong>1.126</strong>
+            <small>+9% vs. promedio</small>
+          </div>
+          <div className="side-stat">
+            <span>Producto más elegido</span>
+            <strong>Burrata</strong>
+            <small>34% la agrega</small>
+          </div>
+          <div className="side-insight">
+            <MagicWand size={20} weight="fill" />
+            <div>
+              <strong>Una mejora sugerida</strong>
+              <p>Probá destacar “para compartir” en el tartar. Ese atributo convierte bien en cenas.</p>
+            </div>
+          </div>
+          <button className="text-button" type="button" onClick={() => onToast("Sugerencia guardada para revisar")}>
+            Guardar sugerencia
+          </button>
+        </aside>
+      </div>
+      )}
+      {editingDish && (
+        <DishEditor
+          dish={editingDish}
+          onClose={() => setEditingDish(null)}
+          onSave={saveDish}
+        />
+      )}
+    </main>
+  );
+}
+
+function DishEditor({ dish, onClose, onSave }) {
+  const [draft, setDraft] = useState(dish);
+  const imageInputRef = useRef(null);
+  const update = (field, value) => setDraft((current) => ({ ...current, [field]: value }));
+
+  const selectImage = (file) => {
+    if (!file) return;
+    update("image", URL.createObjectURL(file));
+    update("imageFile", file);
+  };
+
+  return (
+    <div className="dish-editor-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+      <aside className="dish-editor" role="dialog" aria-modal="true" aria-label={dish.isNew ? "Nuevo plato" : `Editar ${dish.name}`}>
+        <header>
+          <div><p className="eyebrow">{dish.isNew ? "NUEVO PLATO" : "EDITAR PLATO"}</p><h2>{dish.isNew ? "Sumalo a tu carta" : "Afiná cada detalle"}</h2></div>
+          <button type="button" onClick={onClose} aria-label="Cerrar"><X size={20} /></button>
+        </header>
+        <button className="dish-image-picker" type="button" onClick={() => imageInputRef.current?.click()}>
+          <img src={draft.image} alt="" />
+          <span><ImageSquare size={18} /> Cambiar foto</span>
+        </button>
+        <input ref={imageInputRef} className="visually-hidden" type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => selectImage(event.target.files?.[0])} />
+        <div className="dish-form">
+          <label>Nombre del plato<input value={draft.name} onChange={(event) => update("name", event.target.value)} placeholder="Ej. Risotto de hongos" /></label>
+          <label>Descripción<textarea value={draft.detail} onChange={(event) => update("detail", event.target.value)} rows="3" placeholder="Ingredientes y una descripción breve" /></label>
+          <div className="dish-form-row">
+            <label>Precio<input value={draft.price} onChange={(event) => update("price", event.target.value)} placeholder="$18.900" /></label>
+            <label>Categoría<select value={draft.category} onChange={(event) => update("category", event.target.value)}><option>Entradas</option><option>Principales</option><option>Postres</option><option>Bebidas</option></select></label>
+          </div>
+          <label>Etiqueta<input value={draft.badge} onChange={(event) => update("badge", event.target.value)} placeholder="Ej. Favorito, Vegano" /></label>
+          <label className="dish-visible-toggle"><span><strong>Visible en la carta</strong><small>Podés ocultarlo temporalmente si se agota.</small></span><input type="checkbox" checked={draft.available} onChange={(event) => update("available", event.target.checked)} /><i /></label>
+        </div>
+        <footer>
+          <button className="secondary-button" type="button" onClick={onClose}>Cancelar</button>
+          <button className="primary-button" type="button" onClick={() => onSave(draft)}><Check size={17} /> Guardar plato</button>
+        </footer>
+      </aside>
+    </div>
+  );
+}
+
+function GuestMenu({ videoAssets, menuDishes, serviceOptions, visualTheme, restaurant, table, isPublic, onExit, onToast, onServiceRequest, onSubmitOrder, onEvent }) {
+  const [viewMode, setViewMode] = useState("reels");
+  const [category, setCategory] = useState("Todos");
+  const [muted, setMuted] = useState(true);
+  const [activeReel, setActiveReel] = useState(0);
+  const [selection, setSelection] = useState({});
+  const [selectionOpen, setSelectionOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [sentRequest, setSentRequest] = useState("");
+  const [serviceSending, setServiceSending] = useState("");
+  const [orderSending, setOrderSending] = useState(false);
+  const reelFeedRef = useRef(null);
+  const reelVideoRefs = useRef(new Map());
+  const viewStartedAt = useRef(Date.now());
+  const availableDishes = menuDishes.filter((dish) => dish.available);
+  const categories = ["Todos", ...new Set(availableDishes.map((dish) => dish.category))];
+  const filteredDishes = availableDishes.filter((dish) => {
+    const matchesCategory = category === "Todos" || dish.category === category;
+    const text = `${dish.name} ${dish.detail}`.toLowerCase();
+    return matchesCategory && text.includes(query.toLowerCase().trim());
+  });
+  const selected = Object.values(selection).reduce((total, quantity) => total + quantity, 0);
+  const selectedDishes = availableDishes.filter((dish) => selection[dish.id]);
+  const total = selectedDishes.reduce((sum, dish) => sum + Number(dish.price.replace(/\D/g, "")) * selection[dish.id], 0);
+
+  const dishVideo = (dish) => {
+    const published = videoAssets?.[dish.id];
+    if (published?.published && published?.url) return published.url;
+    return demoDishVideos[dish.id] || demoDishVideos.milanesa;
+  };
+
+  useEffect(() => {
+    if (viewMode !== "reels") {
+      reelVideoRefs.current.forEach((video) => video?.pause());
+      return;
+    }
+    reelVideoRefs.current.forEach((video, index) => {
+      if (!video) return;
+      video.muted = muted;
+      if (index === activeReel) video.play().catch(() => null);
+      else video.pause();
+    });
+  }, [activeReel, muted, viewMode]);
+
+  useEffect(() => {
+    if (viewMode !== "reels" || !reelFeedRef.current) return undefined;
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        const video = entry.target.querySelector("video");
+        if (!video) return;
+        video.muted = muted;
+        if (entry.isIntersecting && entry.intersectionRatio >= 0.65) video.play().catch(() => null);
+        else video.pause();
+      });
+    }, { root: reelFeedRef.current, threshold: [0.2, 0.65, 0.9] });
+    reelFeedRef.current.querySelectorAll(".dish-reel").forEach((reel) => observer.observe(reel));
+    return () => observer.disconnect();
+  }, [muted, viewMode, availableDishes.length]);
+
+  const addDish = (dish) => {
+    setSelection((current) => ({ ...current, [dish.id]: (current[dish.id] || 0) + 1 }));
+    onEvent?.({ type: "add_dish", dishId: dish.id });
+    onToast(`${dish.name} agregado a tu selección`);
+  };
+
+  const changeQuantity = (id, change) => {
+    setSelection((current) => {
+      const next = Math.max(0, (current[id] || 0) + change);
+      const updated = { ...current, [id]: next };
+      if (!next) delete updated[id];
+      return updated;
+    });
+  };
+
+  const openReel = (dish) => {
+    onEvent?.({ type: "dish_click", dishId: dish.id, metadata: { source: "list" } });
+    const index = Math.max(0, availableDishes.findIndex((item) => item.id === dish.id));
+    setActiveReel(index);
+    setViewMode("reels");
+    window.setTimeout(() => {
+      const feed = reelFeedRef.current;
+      if (feed) feed.scrollTo({ top: index * feed.clientHeight, behavior: "instant" });
+      const video = reelVideoRefs.current.get(index);
+      if (video) {
+        video.muted = muted;
+        video.play().catch(() => null);
+      }
+    }, 0);
+  };
+
+  const handleReelScroll = (event) => {
+    const feed = event.currentTarget;
+    const next = Math.round(feed.scrollTop / Math.max(feed.clientHeight, 1));
+    if (next !== activeReel && next >= 0 && next < availableDishes.length) setActiveReel(next);
+  };
+
+  useEffect(() => {
+    if (viewMode !== "reels") return undefined;
+    const dish = availableDishes[activeReel];
+    viewStartedAt.current = Date.now();
+    return () => {
+      if (dish) onEvent?.({ type: "dish_view", dishId: dish.id, durationMs: Date.now() - viewStartedAt.current });
+    };
+  }, [activeReel, viewMode]);
+
+  const sendServiceRequest = async (type) => {
+    if (serviceSending) return;
+    setServiceSending(type);
+    try {
+      await onServiceRequest(type);
+      setSentRequest(type);
+      onToast(type === "waiter" ? "El mozo recibió tu llamado" : "La cuenta fue solicitada");
+    } catch (error) {
+      onToast(error.message || "No se pudo enviar la solicitud");
+    } finally {
+      setServiceSending("");
+    }
+  };
+
+  const submitOrder = async () => {
+    if (!selected || orderSending) return;
+    setOrderSending(true);
+    try {
+      await onSubmitOrder(selectedDishes.map((dish) => ({ dishId: dish.id, quantity: selection[dish.id] })));
+      setSelection({});
+      setSelectionOpen(false);
+      onToast(`Pedido enviado a ${table?.label || "la cocina"}`);
+    } catch (error) {
+      onToast(error.message || "No se pudo enviar el pedido");
+    } finally {
+      setOrderSending(false);
+    }
+  };
+
+  return (
+    <div
+      className={`guest-page guest-${viewMode} ${isPublic ? "guest-public" : ""}`}
+      style={{
+        "--guest-primary": visualTheme.primary,
+        "--guest-accent": visualTheme.accent,
+        "--guest-paper": visualTheme.paper,
+      }}
+    >
+      {!isPublic && <div className="guest-preview-bar">
+        <button type="button" onClick={onExit}><ArrowLeft size={17} /> Volver al panel</button>
+        <span><Eye size={15} /> Vista previa del cliente</span>
+      </div>}
+
+      <main className="guest-menu-app">
+        <header className="guest-header">
+          <div className="guest-brand">
+            {restaurant?.logo ? <img className="guest-brand-logo" src={restaurant.logo} alt="" /> : <span className="menu-monogram">{restaurant?.name?.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase() || "LO"}</span>}
+            <span><strong>{restaurant?.name || "La Oliva"}</strong><small>{table?.label || restaurant?.tagline || "Cocina mediterránea"}</small></span>
+          </div>
+          <button type="button" aria-label="Buscar platos" onClick={() => { setViewMode("list"); setSearchOpen(true); }}><MagnifyingGlass size={20} /></button>
+        </header>
+
+        <nav className="guest-view-switch" aria-label="Formato de la carta">
+          <button className={viewMode === "reels" ? "active" : ""} type="button" onClick={() => setViewMode("reels")}>
+            <Play size={14} weight="fill" /> Reels
+          </button>
+          <button className={viewMode === "list" ? "active" : ""} type="button" onClick={() => setViewMode("list")}>
+            <ForkKnife size={15} /> Lista
+          </button>
+          <span>{viewMode === "reels" ? `${activeReel + 1} / ${availableDishes.length}` : `${filteredDishes.length} platos`}</span>
+        </nav>
+
+        {viewMode === "reels" ? (
+          <section className="reel-feed" ref={reelFeedRef} onScroll={handleReelScroll} aria-label="Videos de los platos">
+            {availableDishes.map((dish, index) => (
+              <article className="dish-reel" key={dish.id} aria-label={`${dish.name}, ${dish.price}`}>
+                <video
+                  ref={(node) => {
+                    if (node) reelVideoRefs.current.set(index, node);
+                    else reelVideoRefs.current.delete(index);
+                  }}
+                  src={dishVideo(dish)}
+                  poster={dish.image}
+                  autoPlay={index === 0}
+                  muted={muted}
+                  loop
+                  playsInline
+                  preload={index < 2 ? "auto" : "metadata"}
+                  onCanPlay={(event) => {
+                    if (viewMode === "reels" && index === activeReel) event.currentTarget.play().catch(() => null);
+                  }}
+                  aria-label={`Video en loop de ${dish.name}`}
+                />
+                <div className="dish-reel-shade" />
+                <div className="dish-reel-top">
+                  <span><VideoCamera size={13} weight="fill" /> VIDEO DEL PLATO</span>
+                  <button type="button" onClick={() => setMuted((value) => !value)} aria-label={muted ? "Activar sonido" : "Silenciar videos"}>
+                    {muted ? <SpeakerSlash size={18} weight="fill" /> : <SpeakerHigh size={18} weight="fill" />}
+                  </button>
+                </div>
+                <div className="dish-reel-actions">
+                  <button type="button" onClick={() => addDish(dish)} aria-label={`Agregar ${dish.name}`}>
+                    <span><Plus size={22} weight="bold" /></span>
+                    Agregar
+                  </button>
+                  {selection[dish.id] > 0 && <strong>{selection[dish.id]} elegido{selection[dish.id] > 1 ? "s" : ""}</strong>}
+                </div>
+                <div className="dish-reel-copy">
+                  <div className="dish-reel-meta"><span>{dish.category}</span>{dish.badge && <span>{dish.badge}</span>}</div>
+                  <h1>{dish.name}</h1>
+                  <p>{dish.detail}</p>
+                  <div><strong>{dish.price}</strong><span><Play size={10} weight="fill" /> Se repite en loop</span></div>
+                </div>
+                {index < availableDishes.length - 1 && <span className="reel-next-cue">Deslizá para ver el siguiente</span>}
+              </article>
+            ))}
+          </section>
+        ) : (
+          <div className="guest-list-view">
+            {searchOpen && (
+              <label className="guest-search-field">
+                <MagnifyingGlass size={18} />
+                <input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar un plato o ingrediente" />
+                <button type="button" onClick={() => { setQuery(""); setSearchOpen(false); }} aria-label="Cerrar búsqueda"><X size={17} /></button>
+              </label>
+            )}
+            <section className="guest-welcome">
+              <p className="eyebrow">CARTA COMPLETA</p>
+              <h1>Elegí con los ojos.</h1>
+              <p>Tocá cualquier plato para verlo en video.</p>
+            </section>
+            <nav className="guest-categories" aria-label="Categorías de la carta">
+              {categories.map((item) => (
+                <button key={item} type="button" className={category === item ? "active" : ""} onClick={() => setCategory(item)}>{item}</button>
+              ))}
+            </nav>
+            <section className="guest-dish-section">
+              <div className="guest-section-heading">
+                <div><p className="eyebrow">TODOS LOS PLATOS</p><h2>Encontrá tu próximo favorito</h2></div>
+                <span>{filteredDishes.length} platos</span>
+              </div>
+              <div className="guest-dish-list">
+                {filteredDishes.map((dish) => (
+                  <article key={dish.id} className="guest-dish-list-card" role="button" tabIndex="0" onClick={() => openReel(dish)} onKeyDown={(event) => event.key === "Enter" && openReel(dish)}>
+                    <div className="guest-list-media">
+                      <img src={dish.image} alt={dish.name} />
+                      <span><Play size={14} weight="fill" /> Ver video</span>
+                    </div>
+                    <div>
+                      <span>{dish.badge || dish.category}</span>
+                      <h3>{dish.name}</h3>
+                      <p>{dish.detail}</p>
+                      <div>
+                        <strong>{dish.price}</strong>
+                        <button type="button" onClick={(event) => { event.stopPropagation(); addDish(dish); }} aria-label={`Agregar ${dish.name}`}><Plus size={18} /></button>
+                      </div>
+                    </div>
+                  </article>
+                ))}
+                {!filteredDishes.length && <div className="guest-empty-search"><MagnifyingGlass size={26} /><strong>No encontramos ese plato</strong><p>Probá con otra categoría o ingrediente.</p></div>}
+              </div>
+            </section>
+            <section className="guest-story-card">
+              <img src="/assets/food/tiramisu.png" alt="Tiramisú clásico" />
+              <div><span><VideoCamera size={15} /> HISTORIA DEL PLATO</span><h2>El final que todos esperan</h2><p>Nuestro tiramisú se arma cada mañana, capa por capa.</p></div>
+            </section>
+            <footer className="guest-footer"><span>La Oliva · Buenos Aires</span><small>Carta impulsada por CartIA</small></footer>
+          </div>
+        )}
+      </main>
+
+      <div className="guest-service-dock" style={{ "--service-count": Number(serviceOptions.waiter) + Number(serviceOptions.bill) + 1 }}>
+        {serviceOptions.waiter && <button disabled={Boolean(serviceSending)} className={sentRequest === "waiter" ? "sent" : ""} type="button" onClick={() => sendServiceRequest("waiter")}>{serviceSending === "waiter" ? <SpinnerGap className="spin" size={19} /> : sentRequest === "waiter" ? <Check size={19} /> : <BellSimple size={19} />} {sentRequest === "waiter" ? "Enviado" : "Llamar"}</button>}
+        {serviceOptions.bill && <button disabled={Boolean(serviceSending)} className={sentRequest === "bill" ? "sent" : ""} type="button" onClick={() => sendServiceRequest("bill")}>{serviceSending === "bill" ? <SpinnerGap className="spin" size={19} /> : sentRequest === "bill" ? <Check size={19} /> : <Receipt size={19} />} {sentRequest === "bill" ? "Pedida" : "La cuenta"}</button>}
+        <button className={selected > 0 ? "has-items" : ""} type="button" onClick={() => selected ? setSelectionOpen(true) : onToast("Todavía no elegiste platos")}><span>{selected}</span>Mi selección</button>
+      </div>
+
+      {selectionOpen && (
+        <div className="selection-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setSelectionOpen(false)}>
+          <section className="selection-sheet" role="dialog" aria-modal="true" aria-label="Mi selección">
+            <div className="selection-handle" />
+            <header><div><p className="eyebrow">MI SELECCIÓN</p><h2>Lo que te gustó</h2></div><button type="button" onClick={() => setSelectionOpen(false)} aria-label="Cerrar"><X size={19} /></button></header>
+            <div className="selection-items">
+              {selectedDishes.map((dish) => (
+                <article key={dish.id}>
+                  <img src={dish.image} alt="" />
+                  <div><strong>{dish.name}</strong><small>{dish.price}</small></div>
+                  <div className="quantity-control"><button type="button" onClick={() => changeQuantity(dish.id, -1)}>−</button><span>{selection[dish.id]}</span><button type="button" onClick={() => changeQuantity(dish.id, 1)}>+</button></div>
+                </article>
+              ))}
+            </div>
+            <div className="selection-total"><span>Total estimado</span><strong>${total.toLocaleString("es-AR")}</strong></div>
+            <button className="selection-confirm" type="button" disabled={orderSending} onClick={submitOrder}>{orderSending ? <SpinnerGap className="spin" size={18} /> : <Check size={18} />} {isPublic ? "Enviar pedido" : "Probar envío del pedido"}</button>
+            <p>{isPublic ? `El pedido llegará identificado como ${table?.label || "tu mesa"}.` : "En la carta escaneada, el pedido llegará al panel con la mesa exacta."}</p>
+          </section>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AnaliticaScreen({ period, onPeriod }) {
+  const bars = [42, 56, 48, 73, 66, 88, 78];
+  return (
+    <main className="screen secondary-screen">
+      <section className="screen-heading">
+        <div>
+          <p className="eyebrow">ANALÍTICA ACCIONABLE</p>
+          <h1>Entendé qué hace atractiva tu carta</h1>
+          <p className="heading-copy">No son visitas sueltas: son señales para decidir mejor.</p>
+        </div>
+        <PeriodSelect value={period} onChange={onPeriod} />
+      </section>
+      <section className="analytics-layout">
+        <article className="chart-card span-two">
+          <div className="card-heading">
+            <div><small>ESCANEOS</small><h2>1.842</h2></div>
+            <span className="metric-positive">↑ 18,2%</span>
+          </div>
+          <div className="bar-chart" aria-label="Escaneos durante los últimos siete días">
+            {bars.map((height, index) => (
+              <div key={index}><span style={{ height: `${height}%` }} /><small>{["L", "M", "X", "J", "V", "S", "D"][index]}</small></div>
+            ))}
+          </div>
+        </article>
+        <article className="chart-card">
+          <small>HORARIO MÁS ACTIVO</small>
+          <h2>13:18</h2>
+          <p>El 42% de los escaneos sucede durante el almuerzo.</p>
+          <span className="large-icon"><Clock size={28} /></span>
+        </article>
+        <article className="chart-card">
+          <small>CLICK MÁS USADO</small>
+          <h2>Ver foto</h2>
+          <p>Las imágenes generan 3,2× más interacción que el texto.</p>
+          <span className="large-icon"><ImageSquare size={28} /></span>
+        </article>
+        <article className="chart-card span-two heat-card">
+          <div>
+            <small>RECORRIDO DE LA CARTA</small>
+            <h2>Los clientes empiezan por Recomendados</h2>
+            <p>Después se mueven a Principales y vuelven a Bebidas antes de pedir.</p>
+          </div>
+          <div className="flow-row">
+            {["Recomendados", "Principales", "Bebidas"].map((item, index) => (
+              <div key={item}><span>{index + 1}</span><strong>{item}</strong></div>
+            ))}
+          </div>
+        </article>
+      </section>
+    </main>
+  );
+}
+
+function TableQrModal({ table, onClose, onToast }) {
+  const [qrData, setQrData] = useState("");
+
+  useEffect(() => {
+    QRCode.toDataURL(table.menuUrl, {
+      width: 900,
+      margin: 3,
+      color: { dark: "#173d31", light: "#fffdf8" },
+      errorCorrectionLevel: "H",
+    }).then(setQrData).catch(() => onToast("No se pudo generar el QR"));
+  }, [table.menuUrl]);
+
+  const download = () => {
+    if (!qrData) return;
+    const link = document.createElement("a");
+    link.download = `cartia-${table.label.toLowerCase().replace(/\s+/g, "-")}.png`;
+    link.href = qrData;
+    link.click();
+    onToast(`QR de ${table.label} descargado`);
+  };
+
+  return (
+    <div className="qr-modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+      <section className="qr-modal" role="dialog" aria-modal="true" aria-label={`Código QR de ${table.label}`}>
+        <header><div><p className="eyebrow">QR ÚNICO DE MESA</p><h2>{table.label}</h2></div><button type="button" onClick={onClose} aria-label="Cerrar"><X size={20} /></button></header>
+        <div className="qr-print-card">
+          <span className="qr-print-brand">Cart<span>IA</span></span>
+          {qrData ? <img src={qrData} alt={`Código QR de ${table.label}`} /> : <SpinnerGap className="spin" size={38} />}
+          <strong>Escaneá para ver la carta</strong>
+          <p>{table.label} · pedido y llamados identificados</p>
+        </div>
+        <div className="qr-security-note"><QrCode size={20} /><p><strong>Enlace privado y único</strong><span>No revela el número de mesa y puede desactivarse desde este panel.</span></p></div>
+        <button className="primary-button full" type="button" disabled={!qrData} onClick={download}><DownloadSimple size={18} /> Descargar QR en alta calidad</button>
+      </section>
+    </div>
+  );
+}
+
+function MesasScreen({ onToast, tables, requests, onAddTable, onResolveRequest }) {
+  const [newTable, setNewTable] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [selectedTable, setSelectedTable] = useState(null);
+
+  const addTable = async (event) => {
+    event.preventDefault();
+    const label = newTable.trim() || `Mesa ${tables.length + 1}`;
+    setCreating(true);
+    try {
+      await onAddTable(label);
+      setNewTable("");
+      onToast(`${label} creada con su QR único`);
+    } catch (error) {
+      onToast(error.message || "No se pudo crear la mesa");
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const resolve = async (item) => {
+    try {
+      await onResolveRequest(item);
+      onToast(`${item.table}: ${item.kind === "order" ? "pedido aceptado" : "solicitud resuelta"}`);
+    } catch (error) {
+      onToast(error.message || "No se pudo resolver la solicitud");
+    }
+  };
+  return (
+    <main className="screen secondary-screen">
+      <section className="screen-heading">
+        <div><p className="eyebrow">SALA EN VIVO</p><h1>Cada pedido, en la mesa correcta</h1><p className="heading-copy">QR únicos, pedidos y llamados identificados en tiempo real.</p></div>
+        <span className="live-pill"><span /> Servicio activo</span>
+      </section>
+      <form className="add-table-bar" onSubmit={addTable}>
+        <div><span><QrCode size={22} /></span><p><strong>Agregar una mesa</strong><small>Se generará un código QR único listo para descargar.</small></p></div>
+        <label><span>Nombre o número</span><input value={newTable} onChange={(event) => setNewTable(event.target.value)} placeholder={`Mesa ${tables.length + 1}`} maxLength="60" /></label>
+        <button className="primary-button" type="submit" disabled={creating}>{creating ? <SpinnerGap className="spin" size={17} /> : <Plus size={17} />} Crear mesa</button>
+      </form>
+      <section className="table-board">
+        <div className="requests-list">
+          <div className="section-title-row"><h2>Solicitudes pendientes</h2><span>{requests.length}</span></div>
+          {requests.map((item) => {
+            const Icon = item.kind === "order" ? ForkKnife : item.requestType === "bill" ? Receipt : BellSimple;
+            const accent = item.kind === "order" ? "green" : item.requestType === "bill" ? "wine" : "saffron";
+            return <article className="request-card" key={`${item.kind}-${item.id}`}>
+              <span className={`request-card-icon ${accent}`}><Icon size={21} weight="fill" /></span>
+              <div><strong>{item.table}</strong><p>{item.type}</p>{item.summary && <span className="request-summary">{item.summary}</span>}<small>{item.total ? `${item.total} · ` : ""}{item.time}</small></div>
+              <button type="button" onClick={() => resolve(item)}><CheckCircle size={18} /> {item.kind === "order" ? "Aceptar" : "Resolver"}</button>
+            </article>
+          })}
+          {!requests.length && <div className="empty-state"><CheckCircle size={30} /><strong>Todo al día</strong><p>No hay solicitudes pendientes.</p></div>}
+        </div>
+        <div className="room-map">
+          <div className="section-title-row"><h2>Mesas y códigos QR</h2><span>{tables.length} mesas</span></div>
+          <div className="tables-grid">
+            {tables.filter((table) => table.active !== false).map((table) => {
+              const pending = requests.filter((item) => item.table === table.label);
+              return <button type="button" className={pending.length ? "urgent" : ""} key={table.id} onClick={() => setSelectedTable(table)}>
+                <span>{table.label.replace(/^Mesa\s*/i, "")}</span>
+                <small>{pending.length ? `${pending.length} pendiente${pending.length > 1 ? "s" : ""}` : "QR listo"}</small>
+                <i><QrCode size={14} /> Ver QR</i>
+              </button>;
+            })}
+          </div>
+        </div>
+      </section>
+      {selectedTable && <TableQrModal table={selectedTable} onClose={() => setSelectedTable(null)} onToast={onToast} />}
+    </main>
+  );
+}
+
+function StyleScreen({ onToast, serviceOptions, onServiceOptions, visualTheme, onVisualTheme, onOpenGuest, restaurant, onUploadLogo }) {
+  const logoInputRef = useRef(null);
+  const palettes = [
+    { name: "Oliva editorial", colors: ["#173d31", "#f0b44d", "#f6f0e5"] },
+    { name: "Vino cálido", colors: ["#572536", "#d7926c", "#f8efe7"] },
+    { name: "Costa serena", colors: ["#162b49", "#88b4c6", "#f5f2ea"] },
+  ];
+  const activePalette = Math.max(0, palettes.findIndex((palette) => palette.colors[0] === visualTheme.primary));
+  const selectPalette = (palette) => {
+    onVisualTheme({ primary: palette.colors[0], accent: palette.colors[1], paper: palette.colors[2], name: palette.name });
+  };
+  return (
+    <main className="screen secondary-screen">
+      <section className="screen-heading">
+        <div><p className="eyebrow">IDENTIDAD VISUAL</p><h1>Que la carta se sienta tuya</h1><p className="heading-copy">Cambiá colores, tipografía y logo sin tocar código.</p></div>
+        <div className="toolbar-actions">
+          <button className="secondary-button" type="button" onClick={onOpenGuest}><DeviceMobile size={17} /> Ver en celular</button>
+          <button className="primary-button" type="button" onClick={() => onToast("Estilo publicado correctamente")}><Check size={17} /> Publicar cambios</button>
+        </div>
+      </section>
+      <section className="style-layout">
+        <div className="style-controls">
+          <div className="control-card">
+            <span className="control-number">01</span>
+            <div><h2>Logo del restaurante</h2><p>PNG o SVG sobre fondo transparente.</p></div>
+            <button type="button" onClick={() => logoInputRef.current?.click()}>{restaurant.logo ? <img className="style-logo-thumb" src={restaurant.logo} alt="" /> : <ImageSquare size={18} />} {restaurant.logo ? "Reemplazar logo" : "Cargar logo"}</button>
+            <input ref={logoInputRef} className="visually-hidden" type="file" accept="image/png,image/jpeg,image/webp" onChange={async (event) => {
+              const file = event.target.files?.[0];
+              if (!file) return;
+              try { await onUploadLogo(file); onToast("Logo actualizado en la carta"); } catch (error) { onToast(error.message || "No se pudo cargar el logo"); }
+            }} />
+          </div>
+          <div className="control-card palette-control">
+            <span className="control-number">02</span>
+            <div><h2>Paleta de colores</h2><p>Elegí una base y ajustala a tu identidad.</p></div>
+            <div className="palette-list">
+              {palettes.map((palette, index) => (
+                <button className={activePalette === index ? "active" : ""} key={palette.name} type="button" onClick={() => selectPalette(palette)} aria-label={palette.name}>
+                  {palette.colors.map((color) => <span key={color} style={{ backgroundColor: color }} />)}
+                  {activePalette === index && <Check size={15} weight="bold" />}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="control-card">
+            <span className="control-number">03</span>
+            <div><h2>Tipografía</h2><p>Editorial para títulos, simple para leer rápido.</p></div>
+            <select aria-label="Tipografía de la carta"><option>Elegante editorial</option><option>Moderna limpia</option><option>Clásica cálida</option></select>
+          </div>
+          <div className="control-card">
+            <span className="control-number">04</span>
+            <div><h2>Acciones de mesa</h2><p>Activá solo lo que tu operación necesita.</p></div>
+            <div className="toggle-stack">
+              <label><span>Llamar al mozo</span><input type="checkbox" checked={serviceOptions.waiter} onChange={(event) => onServiceOptions((current) => ({ ...current, waiter: event.target.checked }))} /><i /></label>
+              <label><span>Pedir la cuenta</span><input type="checkbox" checked={serviceOptions.bill} onChange={(event) => onServiceOptions((current) => ({ ...current, bill: event.target.checked }))} /><i /></label>
+            </div>
+          </div>
+        </div>
+        <div className="phone-preview" style={{ "--phone-primary": visualTheme.primary, "--phone-accent": visualTheme.accent, "--phone-paper": visualTheme.paper }}>
+          <div className="phone-top" />
+          {restaurant.logo ? <img className="phone-logo" src={restaurant.logo} alt={restaurant.name} /> : <span className="menu-monogram">{restaurant.name.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase()}</span>}
+          <small>{restaurant.name.toUpperCase()}</small>
+          <h2>Sabores para recordar</h2>
+          <img src="/assets/food/burrata.png" alt="" />
+          <h3>Burrata de la casa</h3>
+          <p>Tomates asados, albahaca fresca y aceite de oliva.</p>
+          <button type="button" onClick={onOpenGuest}>Ver plato</button>
+          <div className="phone-actions-preview">
+            {serviceOptions.waiter && <span><BellSimple size={13} /> Mozo</span>}
+            {serviceOptions.bill && <span><Receipt size={13} /> Cuenta</span>}
+          </div>
+        </div>
+      </section>
+    </main>
+  );
+}
+
+function ContentScreen({ onToast, onOpenGuest, publishedVideos, onPublishVideos, menuDishes, connected, onUploadVideo }) {
+  const fileInputRef = useRef(null);
+  const uploadTimerRef = useRef(null);
+  const firstVideo = publishedVideos[menuDishes[0]?.id] || null;
+  const [draft, setDraft] = useState(firstVideo);
+  const [progress, setProgress] = useState(firstVideo ? 100 : 0);
+  const [targetDishId, setTargetDishId] = useState(firstVideo?.dishId || menuDishes[0]?.id || "milanesa");
+  const [error, setError] = useState("");
+
+  useEffect(() => () => window.clearInterval(uploadTimerRef.current), []);
+
+  const handleFile = (file) => {
+    if (!file) return;
+    setError("");
+    const extension = file.name.split(".").pop()?.toLowerCase();
+    const accepted = extension === "mp4";
+    if (!accepted) {
+      setError("Para la beta de Hostinger usá MP4 con video H.264 y audio AAC.");
+      return;
+    }
+    if (file.size > 50 * 1024 * 1024) {
+      setError("El archivo supera 50 MB. Comprimilo antes de subirlo.");
+      return;
+    }
+
+    if (draft?.url?.startsWith("blob:") && draft.url !== publishedVideos[draft.dishId]?.url) URL.revokeObjectURL(draft.url);
+    const url = URL.createObjectURL(file);
+    const targetDish = menuDishes.find((dish) => dish.id === targetDishId) || menuDishes[0];
+    setDraft({
+      url,
+      fileName: file.name,
+      size: file.size,
+      type: file.type || `video/${extension}`,
+      dish: targetDish?.name || "Milanesa napolitana",
+      dishId: targetDish?.id || "milanesa",
+      duration: null,
+      width: null,
+      height: null,
+      published: false,
+      file,
+    });
+    setProgress(connected ? 0 : 8);
+    window.clearInterval(uploadTimerRef.current);
+    if (connected) return;
+    uploadTimerRef.current = window.setInterval(() => {
+      setProgress((current) => {
+        if (current >= 100) {
+          window.clearInterval(uploadTimerRef.current);
+          return 100;
+        }
+        return Math.min(100, current + 18);
+      });
+    }, 160);
+  };
+
+  const formatSize = (bytes) => `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+
+  const publish = async (openAfter = false) => {
+    if (!draft || (!connected && progress < 100) || (connected && !draft.file)) return;
+    try {
+      const dish = menuDishes.find((item) => item.id === draft.dishId);
+      const published = connected && draft.file
+        ? await onUploadVideo(draft.file, dish, draft, setProgress)
+        : { ...draft, published: true };
+      setDraft(published);
+      onPublishVideos((current) => ({ ...current, [published.dishId]: published }));
+      onToast("Video publicado en la carta");
+      if (openAfter) window.setTimeout(onOpenGuest, 180);
+    } catch (uploadError) {
+      setError(uploadError.message || "No se pudo publicar el video");
+      setProgress(100);
+    }
+  };
+
+  const removeDraft = () => {
+    if (draft?.url?.startsWith("blob:")) URL.revokeObjectURL(draft.url);
+    const removedDishId = draft?.dishId;
+    setDraft(null);
+    setProgress(0);
+    setError("");
+    if (removedDishId) {
+      onPublishVideos((current) => {
+        const next = { ...current };
+        delete next[removedDishId];
+        return next;
+      });
+    }
+    onToast("Video eliminado de la carta");
+  };
+
+  const manageVideo = (dish) => {
+    const video = publishedVideos[dish.id];
+    if (video) {
+      setTargetDishId(dish.id);
+      setDraft({ ...video, dish: dish.name, dishId: dish.id });
+      setProgress(100);
+      setError("");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } else {
+      setTargetDishId(dish.id);
+      setDraft(null);
+      setProgress(0);
+      window.setTimeout(() => fileInputRef.current?.click(), 0);
+    }
+  };
+
+  return (
+    <main className="screen secondary-screen video-admin-screen">
+      <section className="screen-heading video-heading">
+        <div><p className="eyebrow">CONTENIDO IA · PUBLICACIÓN</p><h1>El plato entra por los ojos</h1><p className="heading-copy">Cargá un video, revisalo como cliente y publicalo cuando esté perfecto.</p></div>
+        <button className="secondary-button" type="button" onClick={onOpenGuest}><DeviceMobile size={17} /> Ver carta del cliente</button>
+      </section>
+
+      <section className="video-workspace">
+        <div className="video-upload-column">
+          <div className="video-step-heading"><span>01</span><div><h2>Subí el video</h2><p>{connected ? "Se guardará en tu hosting y quedará visible al instante." : "Modo de demostración local."}</p></div></div>
+          {!draft ? (
+            <button
+              className="video-dropzone"
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              onDragOver={(event) => event.preventDefault()}
+              onDrop={(event) => {
+                event.preventDefault();
+                handleFile(event.dataTransfer.files?.[0]);
+              }}
+            >
+              <span><CloudArrowUp size={30} weight="duotone" /></span>
+              <strong>Arrastrá tu video acá</strong>
+              <p>o elegilo desde tu computadora</p>
+              <small>MP4 (H.264) · máximo 50 MB</small>
+            </button>
+          ) : (
+            <div className="video-preview-card">
+              <div className="video-preview-media">
+                {draft.type === "video/quicktime" ? (
+                  <div className="mov-preview">
+                    <FileVideo size={34} />
+                    <strong>Archivo MOV listo para procesar</strong>
+                    <small>Se convertirá antes de publicarse.</small>
+                  </div>
+                ) : (
+                  <video
+                    src={draft.url}
+                    controls
+                    muted
+                    playsInline
+                    preload="metadata"
+                    onLoadedMetadata={(event) => {
+                      const media = event.currentTarget;
+                      setDraft((current) => current ? { ...current, duration: media.duration, width: media.videoWidth, height: media.videoHeight } : current);
+                    }}
+                  />
+                )}
+                {draft.published && <span className="published-overlay"><CheckCircle size={16} weight="fill" /> Publicado</span>}
+              </div>
+              <div className="video-file-row">
+                <span><FileVideo size={20} /></span>
+                <div><strong>{draft.fileName}</strong><small>{formatSize(draft.size)}{draft.duration ? ` · ${Math.round(draft.duration)} s` : ""}</small></div>
+                <button className="replace-video-button" type="button" onClick={() => fileInputRef.current?.click()} aria-label="Cambiar video"><UploadSimple size={18} /></button>
+                <button type="button" onClick={removeDraft} aria-label="Eliminar video"><Trash size={18} /></button>
+              </div>
+              <div className="upload-progress">
+                <span style={{ width: `${progress}%` }} />
+              </div>
+              <small className="upload-status">{progress < 100 ? `Preparando archivo · ${progress}%` : "Archivo listo para publicar"}</small>
+            </div>
+          )}
+          <input
+            ref={fileInputRef}
+            className="visually-hidden"
+            type="file"
+            accept=".mp4,video/mp4"
+            onChange={(event) => handleFile(event.target.files?.[0])}
+          />
+          {error && <div className="video-error"><WarningCircle size={18} /> {error}</div>}
+
+          <div className="video-specs">
+            <div><span className="spec-icon"><DeviceMobile size={20} /></span><p><strong>Vertical recomendado</strong>1080 × 1920 · relación 9:16</p></div>
+            <div><span className="spec-icon"><Clock size={20} /></span><p><strong>Corto y apetitoso</strong>6 a 12 segundos · sin introducción</p></div>
+            <div><span className="spec-icon"><FileVideo size={20} /></span><p><strong>Liviano para cargar</strong>Ideal entre 3 y 8 MB</p></div>
+          </div>
+        </div>
+
+        <aside className="video-publish-panel">
+          <div className="video-step-heading light"><span>02</span><div><h2>Prepará la publicación</h2><p>Así aparecerá en la carta.</p></div></div>
+          <label className="video-field">Plato asociado
+            <select
+              value={draft?.dish || "Milanesa napolitana"}
+              onChange={(event) => {
+                const dish = menuDishes.find((item) => item.name === event.target.value);
+                setTargetDishId(dish.id);
+                setDraft((current) => current ? { ...current, dish: dish.name, dishId: dish.id, published: false } : current);
+              }}
+              disabled={!draft}
+            >
+              {menuDishes.map((dish) => <option key={dish.id}>{dish.name}</option>)}
+            </select>
+          </label>
+          <div className="video-mobile-mock">
+            <div className="video-mobile-top"><span className="menu-monogram">LO</span><div><strong>La Oliva</strong><small>Vista del cliente</small></div></div>
+            <div className="video-mobile-media">
+              {draft && draft.type !== "video/quicktime" ? <video src={draft.url} muted autoPlay loop playsInline /> : <img src="/assets/food/milanesa.png" alt="" />}
+              <span><Play size={14} weight="fill" /> Video del chef</span>
+            </div>
+            <h3>{draft?.dish || "Milanesa napolitana"}</h3>
+            <p>Textura crujiente, ingredientes frescos y ese punto casero que hace volver.</p>
+          </div>
+          <div className="publish-checks">
+            <span className={draft ? "done" : ""}><Check size={14} /> Archivo seleccionado</span>
+            <span className={progress === 100 ? "done" : ""}><Check size={14} /> Procesamiento completo</span>
+            <span className={draft?.published ? "done" : ""}><Check size={14} /> Visible en la carta</span>
+          </div>
+          <button className="primary-button full" type="button" disabled={!draft || (connected ? !draft.file : progress < 100)} onClick={() => publish(false)}>
+            <UploadSimple size={17} /> {progress > 0 && progress < 100 ? `Subiendo · ${progress}%` : draft?.published ? "Volver a publicar" : "Publicar video"}
+          </button>
+          <button className="video-preview-cta" type="button" disabled={!draft || (connected ? !draft.file : progress < 100)} onClick={() => publish(true)}>
+            <DeviceMobile size={17} /> Publicar y ver como cliente
+          </button>
+          <p className="local-demo-note">{connected ? "El video se publica desde el hosting con caché prolongada. Recomendado: 720 × 1280, 6–12 s y 3–8 MB." : "En esta vista local el video queda disponible hasta que recargues la página."}</p>
+        </aside>
+      </section>
+
+      <section className="video-library">
+        <div className="section-title-row"><div><p className="eyebrow">BIBLIOTECA</p><h2>Un video para cada plato</h2></div><span>{Object.keys(publishedVideos).length} videos</span></div>
+        <div className="video-library-grid">
+          {menuDishes.map((dish) => (
+            <article key={dish.id}>
+              <img src={dish.image} alt="" />
+              <div><strong>{dish.name}</strong><small>{publishedVideos[dish.id] ? "Video publicado · loop activo" : "Esperando video"}</small></div>
+              <button type="button" onClick={() => manageVideo(dish)}><SlidersHorizontal size={17} /> Gestionar</button>
+            </article>
+          ))}
+        </div>
+      </section>
+    </main>
+  );
+}
+
+function AdminScreen({ onToast, clients, onCreateRestaurant }) {
+  const [query, setQuery] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [draft, setDraft] = useState({ restaurantName: "", tagline: "", adminName: "", email: "", password: "" });
+  const [saving, setSaving] = useState(false);
+  const filtered = clients.filter((client) => client.name.toLowerCase().includes(query.toLowerCase()));
+
+  const create = async (event) => {
+    event.preventDefault();
+    setSaving(true);
+    try {
+      await onCreateRestaurant(draft);
+      setCreating(false);
+      setDraft({ restaurantName: "", tagline: "", adminName: "", email: "", password: "" });
+      onToast("Restaurante creado y acceso listo para entregar");
+    } catch (error) {
+      onToast(error.message || "No se pudo crear el restaurante");
+    } finally {
+      setSaving(false);
+    }
+  };
+  return (
+    <main className="screen secondary-screen">
+      <section className="screen-heading">
+        <div><p className="eyebrow">SUPERADMIN · CARTIA</p><h1>Restaurantes bajo control</h1><p className="heading-copy">Altas, accesos, contenido y soporte personalizado desde un solo lugar.</p></div>
+        <button className="primary-button" type="button" onClick={() => setCreating(true)}><Plus size={17} /> Nuevo restaurante</button>
+      </section>
+      <section className="admin-stats">
+        <article><Storefront size={22} /><div><strong>{clients.filter((client) => client.status === "active").length}</strong><small>Clientes activos</small></div></article>
+        <article><QrCode size={22} /><div><strong>{clients.reduce((total, client) => total + Number(client.table_count || 0), 0)}</strong><small>Mesas con QR</small></div></article>
+        <article><MagicWand size={22} /><div><strong>{clients.reduce((total, client) => total + Number(client.dish_count || 0), 0)}</strong><small>Platos gestionados</small></div></article>
+      </section>
+      <section className="client-table">
+        <div className="client-table-toolbar"><h2>Clientes</h2><label><MagnifyingGlass size={17} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar restaurante" /></label></div>
+        {filtered.map((client) => (
+          <article key={client.id}>
+            <span className="client-avatar">{client.name.split(" ").map((part) => part[0]).join("").slice(0, 2)}</span>
+            <div><strong>{client.name}</strong><small>/{client.slug}</small></div>
+            <span>{client.table_count} mesas · {client.dish_count} platos</span>
+            <span className={`status-chip ${client.status === "active" ? "active" : "setup"}`}>{client.status === "active" ? "Activo" : "Pausado"}</span>
+            <button type="button" onClick={() => onToast(`${client.name}: gestión avanzada estará en la siguiente etapa`)}>Gestionar</button>
+          </article>
+        ))}
+      </section>
+      {creating && <div className="dish-editor-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setCreating(false)}>
+        <aside className="dish-editor client-create-modal" role="dialog" aria-modal="true" aria-label="Nuevo restaurante">
+          <header><div><p className="eyebrow">ALTA MANUAL · CARTIA</p><h2>Nuevo restaurante</h2></div><button type="button" onClick={() => setCreating(false)} aria-label="Cerrar"><X size={20} /></button></header>
+          <form className="dish-form" onSubmit={create}>
+            <label>Nombre del restaurante<input value={draft.restaurantName} onChange={(event) => setDraft((current) => ({ ...current, restaurantName: event.target.value }))} placeholder="Ej. Casa Nona" required /></label>
+            <label>Descripción breve<input value={draft.tagline} onChange={(event) => setDraft((current) => ({ ...current, tagline: event.target.value }))} placeholder="Cocina italiana contemporánea" /></label>
+            <label>Nombre del responsable<input value={draft.adminName} onChange={(event) => setDraft((current) => ({ ...current, adminName: event.target.value }))} placeholder="Nombre y apellido" required /></label>
+            <label>Email de acceso<input type="email" value={draft.email} onChange={(event) => setDraft((current) => ({ ...current, email: event.target.value }))} placeholder="admin@restaurante.com" required /></label>
+            <label>Contraseña inicial<input type="password" minLength="10" value={draft.password} onChange={(event) => setDraft((current) => ({ ...current, password: event.target.value }))} placeholder="Mínimo 10 caracteres" required /></label>
+            <footer><button className="secondary-button" type="button" onClick={() => setCreating(false)}>Cancelar</button><button className="primary-button" type="submit" disabled={saving}>{saving ? <SpinnerGap className="spin" size={17} /> : <Plus size={17} />} Crear acceso</button></footer>
+          </form>
+        </aside>
+      </div>}
+    </main>
+  );
+}
+
+function ImproveDrawer({ onClose, onSave }) {
+  return (
+    <div className="drawer-backdrop" role="presentation" onMouseDown={onClose}>
+      <aside className="drawer" role="dialog" aria-modal="true" aria-labelledby="improve-title" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="drawer-header">
+          <div><p className="eyebrow">MEJORA GUIADA</p><h2 id="improve-title">Milanesa napolitana</h2></div>
+          <button className="icon-button" type="button" onClick={onClose} aria-label="Cerrar"><X size={20} /></button>
+        </div>
+        <img className="drawer-image" src="/assets/food/milanesa.png" alt="Milanesa napolitana" />
+        <div className="suggestion-box"><MagicWand size={20} weight="fill" /><p><strong>Qué detectamos</strong>La gente se detiene, abre la foto y vuelve atrás. Hagamos más concreta la promesa del plato.</p></div>
+        <label className="field-label">Nombre del plato<input defaultValue="Milanesa napolitana" /></label>
+        <label className="field-label">Descripción<textarea defaultValue="Ternera crujiente, salsa de tomate casera, mozzarella fundida y papas doradas." /></label>
+        <label className="field-label">Precio<input defaultValue="$17.900" /></label>
+        <div className="drawer-actions">
+          <button className="secondary-button" type="button" onClick={onClose}>Cancelar</button>
+          <button className="primary-button" type="button" onClick={onSave}><Check size={17} /> Guardar mejora</button>
+        </div>
+      </aside>
+    </div>
+  );
+}
+
+function RequestsDrawer({ onClose, onRoom }) {
+  return (
+    <div className="drawer-backdrop" role="presentation" onMouseDown={onClose}>
+      <aside className="drawer request-drawer" role="dialog" aria-modal="true" aria-labelledby="requests-title" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="drawer-header"><div><p className="eyebrow">SALA EN VIVO</p><h2 id="requests-title">2 solicitudes pendientes</h2></div><button className="icon-button" type="button" onClick={onClose} aria-label="Cerrar"><X size={20} /></button></div>
+        <article className="drawer-request"><span className="request-icon request-icon-waiter"><BellSimple size={19} weight="fill" /></span><div><strong>Mesa 12</strong><p>Llama al mozo</p><small>Hace 1 minuto</small></div></article>
+        <article className="drawer-request"><span className="request-icon request-icon-bill"><Receipt size={19} weight="fill" /></span><div><strong>Mesa 4</strong><p>Pidió la cuenta</p><small>Hace 3 minutos</small></div></article>
+        <button className="primary-button full" type="button" onClick={onRoom}>Gestionar la sala</button>
+      </aside>
+    </div>
+  );
+}
+
+function Toast({ message }) {
+  if (!message) return null;
+  return <div className="toast" role="status"><CheckCircle size={20} weight="fill" />{message}</div>;
+}
+
+function LoadingScreen({ message = "Preparando tu restaurante" }) {
+  return <main className="auth-page"><section className="auth-card loading-card"><span className="auth-brand">Cart<i>IA</i></span><SpinnerGap className="spin" size={34} /><h1>{message}</h1><p>Estamos conectando la carta, las mesas y el servicio.</p></section></main>;
+}
+
+function LoginScreen({ onLogin, error }) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [sending, setSending] = useState(false);
+  const [formError, setFormError] = useState(error || "");
+
+  const submit = async (event) => {
+    event.preventDefault();
+    setSending(true);
+    setFormError("");
+    try {
+      await onLogin(email, password);
+    } catch (loginError) {
+      setFormError(loginError.message || "No se pudo iniciar sesión");
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <main className="auth-page">
+      <section className="auth-card">
+        <div className="auth-intro"><span className="auth-brand">Cart<i>IA</i></span><p className="eyebrow">PANEL DEL RESTAURANTE</p><h1>Todo tu salón,<br />en un solo lugar.</h1><p>Gestioná la carta, los videos, las mesas y cada pedido que llega desde los QR.</p></div>
+        <form onSubmit={submit}>
+          <div><h2>Ingresá a tu cuenta</h2><p>La cuenta la entrega el administrador de CartIA.</p></div>
+          <label>Email del restaurante<input type="email" autoComplete="username" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="hola@restaurante.com" required /></label>
+          <label>Contraseña<input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="••••••••••" required /></label>
+          {formError && <div className="auth-error"><WarningCircle size={18} /> {formError}</div>}
+          <button className="primary-button full" type="submit" disabled={sending}>{sending ? <SpinnerGap className="spin" size={18} /> : <Storefront size={18} />} Entrar al panel</button>
+          <small>No hay registro público. Si necesitas acceso, solicítalo al equipo de CartIA.</small>
+        </form>
+      </section>
+    </main>
+  );
+}
+
+export function App() {
+  const [screen, navigate] = useHashScreen();
+  const [period, setPeriod] = useState("Últimos 7 días");
+  const [railVisible, setRailVisible] = useState(true);
+  const [drawer, setDrawer] = useState(null);
+  const [toast, setToast] = useState("");
+  const [menuDishes, setMenuDishes] = usePersistentState("cartia-menu-dishes", initialMenuDishes);
+  const [serviceOptions, setServiceOptions] = usePersistentState("cartia-service-options", { waiter: true, bill: true });
+  const [visualTheme, setVisualTheme] = usePersistentState("cartia-visual-theme", {
+    primary: "#173d31",
+    accent: "#f0b44d",
+    paper: "#f6f0e5",
+    name: "Oliva editorial",
+  });
+  const [publishedVideos, setPublishedVideos] = useState(initialPublishedVideos);
+  const [authStatus, setAuthStatus] = useState("loading");
+  const [csrf, setCsrf] = useState("");
+  const [currentUser, setCurrentUser] = useState(null);
+  const [appError, setAppError] = useState("");
+  const [restaurant, setRestaurant] = useState({ name: "La Oliva", slug: "la-oliva", tagline: "Cocina mediterránea" });
+  const [activeTable, setActiveTable] = useState(null);
+  const [tables, setTables] = useState(() => Array.from({ length: 16 }, (_, index) => ({
+    id: index + 1,
+    label: `Mesa ${index + 1}`,
+    token: `demo-table-${index + 1}`,
+    active: true,
+    menuUrl: `${window.location.origin}/?r=la-oliva&t=demo-table-${index + 1}#menu`,
+  })));
+  const [requests, setRequests] = useState([
+    { id: 1, kind: "service", requestType: "waiter", table: "Mesa 12", type: "Llama al mozo", time: "hace 1 min" },
+    { id: 2, kind: "service", requestType: "bill", table: "Mesa 4", type: "Pidió la cuenta", time: "hace 3 min" },
+    { id: 3, kind: "order", requestType: "order", table: "Mesa 8", type: "Nuevo pedido", summary: "2× Burrata · 1× Pulpo", total: "$51.300", time: "hace 4 min" },
+  ]);
+  const [clients, setClients] = useState([
+    { id: 1, name: "La Oliva", slug: "la-oliva", status: "active", table_count: 16, dish_count: 6 },
+    { id: 2, name: "Casa Nona", slug: "casa-nona", status: "active", table_count: 12, dish_count: 24 },
+  ]);
+  const [analytics, setAnalytics] = useState(null);
+  const publicParams = useMemo(getPublicParams, []);
+  const isPublicGuest = screen === "menu" && Boolean(publicParams.restaurant && publicParams.tableToken);
+
+  const applyBootstrap = (data) => {
+    if (data.restaurant) setRestaurant(data.restaurant);
+    if (data.table) setActiveTable(data.table);
+    if (data.dishes) {
+      setMenuDishes(data.dishes);
+      setPublishedVideos(Object.fromEntries(data.dishes.filter((dish) => dish.video).map((dish) => [dish.id, dish.video])));
+    }
+    if (data.serviceOptions) setServiceOptions(data.serviceOptions);
+    if (data.visualTheme) setVisualTheme(data.visualTheme);
+    if (data.tables) setTables(data.tables);
+    if (data.csrf) setCsrf(data.csrf);
+    if (data.user) setCurrentUser(data.user);
+  };
+
+  const loadRequests = async () => {
+    const data = await cartiaApi.requests();
+    setRequests(data.requests || []);
+  };
+
+  const loadAnalytics = async () => {
+    const days = period === "Hoy" ? 1 : period === "Últimos 30 días" ? 30 : 7;
+    const data = await cartiaApi.analytics(days);
+    setAnalytics(data);
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    const start = async () => {
+      if (isPublicGuest) {
+        try {
+          const data = await cartiaApi.publicMenu(publicParams);
+          if (!cancelled) {
+            applyBootstrap(data);
+            setAuthStatus("public");
+          }
+        } catch (error) {
+          if (!cancelled) {
+            setAppError(error.message || "No se pudo abrir esta carta");
+            setAuthStatus("public-error");
+          }
+        }
+        return;
+      }
+      if (isDemoRuntime) {
+        setAuthStatus("demo");
+        return;
+      }
+      try {
+        const session = await cartiaApi.me();
+        if (!session.authenticated) {
+          if (!cancelled) setAuthStatus("unauthenticated");
+          return;
+        }
+        if (session.user?.role === "superadmin") {
+          const clientData = await cartiaApi.restaurants();
+          if (!cancelled) {
+            setCurrentUser(session.user);
+            setCsrf(session.csrf || "");
+            setClients(clientData.restaurants || []);
+            setAuthStatus("superadmin");
+            navigate("admin");
+          }
+          return;
+        }
+        const data = await cartiaApi.bootstrap();
+        if (!cancelled) {
+          applyBootstrap(data);
+          setAuthStatus("authenticated");
+          loadRequests().catch(() => null);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setAppError(error.message || "No se pudo conectar con CartIA");
+          setAuthStatus("unauthenticated");
+        }
+      }
+    };
+    start();
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    if (authStatus !== "authenticated") return undefined;
+    const timer = window.setInterval(() => loadRequests().catch(() => null), 4000);
+    return () => window.clearInterval(timer);
+  }, [authStatus]);
+
+  useEffect(() => {
+    if (authStatus !== "authenticated") return;
+    loadAnalytics().catch(() => null);
+  }, [authStatus, period]);
+
+  useEffect(() => {
+    if (authStatus !== "authenticated" || !csrf) return undefined;
+    const timer = window.setTimeout(() => {
+      cartiaApi.saveSettings(serviceOptions, visualTheme, csrf).catch((error) => showToast(error.message));
+    }, 450);
+    return () => window.clearTimeout(timer);
+  }, [serviceOptions, visualTheme, authStatus, csrf]);
+
+  const showToast = (message) => {
+    setToast(message);
+    window.setTimeout(() => setToast(""), 2800);
+  };
+
+  const openRoom = () => {
+    setDrawer(null);
+    navigate("mesas");
+  };
+
+  const activeLabel = useMemo(() => screen === "menu" ? "Carta de La Oliva" : navItems.find((item) => item.id === screen)?.label || "Administración", [screen]);
+
+  useEffect(() => {
+    document.title = `${activeLabel} · CartIA`;
+  }, [activeLabel]);
+
+  const login = async (email, password) => {
+    const session = await cartiaApi.login(email, password);
+    setCsrf(session.csrf || "");
+    setCurrentUser(session.user || null);
+    if (session.user?.role === "superadmin") {
+      const clientData = await cartiaApi.restaurants();
+      setClients(clientData.restaurants || []);
+      setAuthStatus("superadmin");
+      navigate("admin");
+      return;
+    }
+    const data = await cartiaApi.bootstrap();
+    applyBootstrap(data);
+    setAuthStatus("authenticated");
+    await loadRequests();
+  };
+
+  if (authStatus === "loading") return <LoadingScreen message={isPublicGuest ? "Abriendo la carta" : "Preparando tu restaurante"} />;
+  if (authStatus === "public-error") return <main className="auth-page"><section className="auth-card loading-card"><WarningCircle size={38} /><h1>No pudimos abrir esta mesa</h1><p>{appError}</p><small>Pedí al restaurante que verifique o vuelva a imprimir el QR.</small></section></main>;
+  if (authStatus === "unauthenticated") return <LoginScreen onLogin={login} error={appError} />;
+
+  const connected = authStatus === "authenticated";
+  const createRestaurant = async (draft) => {
+    if (authStatus !== "superadmin") return;
+    const response = await cartiaApi.createRestaurant(draft, csrf);
+    setClients((current) => [{ ...response.restaurant, status: "active", table_count: 0, dish_count: 0 }, ...current]);
+  };
+  const saveDish = async (dish) => {
+    if (!connected) return {};
+    const response = await cartiaApi.saveDish(dish, csrf);
+    if (dish.imageFile) {
+      const uploaded = await cartiaApi.uploadDishImage(dish.imageFile, response.dish.databaseId, csrf);
+      return { ...response.dish, image: uploaded.image, imageFile: undefined };
+    }
+    return response.dish;
+  };
+  const addTable = async (label) => {
+    if (!connected) {
+      const number = tables.length + 1;
+      setTables((current) => [...current, { id: `demo-${Date.now()}`, label, token: `demo-table-${number}`, active: true, menuUrl: `${window.location.origin}/?r=la-oliva&t=demo-table-${number}#menu` }]);
+      return;
+    }
+    const response = await cartiaApi.createTable(label, csrf);
+    setTables((current) => [...current, response.table]);
+  };
+  const resolveRequest = async (item) => {
+    if (connected) await cartiaApi.resolveRequest(item, csrf);
+    setRequests((current) => current.filter((request) => !(request.id === item.id && request.kind === item.kind)));
+  };
+  const uploadVideo = async (file, dish, metadata, onProgress) => {
+    const response = await cartiaApi.uploadVideo(file, dish, metadata, csrf, onProgress);
+    return response.video;
+  };
+  const uploadLogo = async (file) => {
+    if (!connected) {
+      setRestaurant((current) => ({ ...current, logo: URL.createObjectURL(file) }));
+      return;
+    }
+    const response = await cartiaApi.uploadLogo(file, csrf);
+    setRestaurant((current) => ({ ...current, logo: response.logo }));
+  };
+  const publicServiceRequest = (type) => isPublicGuest ? cartiaApi.serviceRequest({ ...publicParams, type }) : Promise.resolve({ ok: true });
+  const publicOrder = (items) => isPublicGuest ? cartiaApi.order({ ...publicParams, items }) : Promise.resolve({ ok: true });
+  const publicEvent = (event) => {
+    if (isPublicGuest) cartiaApi.event({ ...publicParams, ...event }).catch(() => null);
+  };
+
+  if (screen === "menu") {
+    return (
+      <>
+        <GuestMenu
+          videoAssets={publishedVideos}
+          menuDishes={menuDishes}
+          serviceOptions={serviceOptions}
+          visualTheme={visualTheme}
+          restaurant={restaurant}
+          table={activeTable}
+          isPublic={isPublicGuest}
+          onExit={() => navigate("carta")}
+          onToast={showToast}
+          onServiceRequest={publicServiceRequest}
+          onSubmitOrder={publicOrder}
+          onEvent={publicEvent}
+        />
+        <Toast message={toast} />
+      </>
+    );
+  }
+
+  let content;
+  if (screen === "carta") content = <CartaScreen menuDishes={menuDishes} onMenuDishes={setMenuDishes} onToast={showToast} onOpenGuest={() => navigate("menu")} onSaveDish={saveDish} />;
+  else if (screen === "analitica") content = <AnaliticaScreen period={period} onPeriod={setPeriod} />;
+  else if (screen === "mesas") content = <MesasScreen onToast={showToast} tables={tables} requests={requests} onAddTable={addTable} onResolveRequest={resolveRequest} />;
+  else if (screen === "estilo") content = <StyleScreen onToast={showToast} serviceOptions={serviceOptions} onServiceOptions={setServiceOptions} visualTheme={visualTheme} onVisualTheme={setVisualTheme} onOpenGuest={() => navigate("menu")} restaurant={restaurant} onUploadLogo={uploadLogo} />;
+  else if (screen === "contenido") content = <ContentScreen onToast={showToast} onOpenGuest={() => navigate("menu")} publishedVideos={publishedVideos} onPublishVideos={setPublishedVideos} menuDishes={menuDishes} connected={connected} onUploadVideo={uploadVideo} />;
+  else if (screen === "admin") content = <AdminScreen onToast={showToast} clients={clients} onCreateRestaurant={createRestaurant} />;
+  else content = <Dashboard period={period} onPeriod={setPeriod} onImprove={() => setDrawer("improve")} analytics={analytics} />;
+
+  return (
+    <div className="app-shell">
+      <AppHeader onRequests={() => setDrawer("requests")} />
+      {railVisible && screen !== "admin" && <RequestRail onOpenRoom={openRoom} onDismiss={() => setRailVisible(false)} />}
+      <div className={`app-body ${railVisible && screen !== "admin" ? "has-rail" : ""}`}>
+        <Sidebar active={screen} onNavigate={navigate} />
+        <div className="main-scroll">{content}</div>
+      </div>
+      <BottomNav active={screen} onNavigate={navigate} />
+      {drawer === "improve" && <ImproveDrawer onClose={() => setDrawer(null)} onSave={() => { setDrawer(null); showToast("Mejora publicada en la carta"); }} />}
+      {drawer === "requests" && <RequestsDrawer onClose={() => setDrawer(null)} onRoom={openRoom} />}
+      <Toast message={toast} />
+    </div>
+  );
+}

@@ -1,0 +1,32 @@
+name: CI
+on:
+  pull_request:
+  push:
+    branches: [main]
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env: { POSTGRES_DB: cartia_test, POSTGRES_USER: cartia, POSTGRES_PASSWORD: cartia_test }
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U cartia -d cartia_test" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://cartia:cartia_test@localhost:5432/cartia_test?schema=public
+      SESSION_SECRET: ci-only-secret-not-for-production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: 'backend/package-lock.json' }
+      - run: npm ci --prefix backend
+      - run: npm ci --prefix frontend
+      - run: npm --prefix backend run prisma:generate
+      - run: npm --prefix backend exec prisma migrate deploy
+      - run: npm --prefix backend run typecheck
+      - run: npm --prefix backend test -- --runInBand
+      - run: npm --prefix backend run build
+      - run: npm --prefix frontend run build
+      - run: docker build -f docker/api.Dockerfile -t cartia-api:test .
+      - run: docker build -f docker/web.Dockerfile -t cartia-web:test .

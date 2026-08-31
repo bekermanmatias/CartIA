@@ -1,0 +1,19 @@
+{
+  "name": "cartia",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "npm --prefix frontend run dev",
+    "dev:api": "npm --prefix backend run start:dev",
+    "dev:docker": "docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build db api frontend",
+    "build": "npm --prefix frontend run build && node scripts/prepare-sites-build.mjs",
+    "build:api": "npm --prefix backend run build",
+    "build:hostinger": "npm --prefix frontend run build && node scripts/prepare-hostinger-build.mjs",
+    "preview": "npm --prefix frontend run preview",
+    "test:sites": "node --test tests/sites-worker.test.mjs",
+    "test:api": "npm --prefix backend test",
+    "typecheck": "npm --prefix backend run typecheck",
+    "test": "npm run test:sites && npm run test:api"
+  }
+}

@@ -1,0 +1,305 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum OrganizationRole {
+  OWNER
+  ADMIN
+  ANALYST
+}
+
+enum LocationRole {
+  MANAGER
+  STAFF
+  VIEWER
+}
+
+enum UserStatus {
+  ACTIVE
+  DISABLED
+}
+
+enum LocationStatus {
+  ACTIVE
+  PAUSED
+}
+
+enum OrderStatus {
+  NEW
+  ACCEPTED
+  PREPARING
+  READY
+  DELIVERED
+  CANCELLED
+}
+
+enum ServiceRequestType {
+  WAITER
+  BILL
+}
+
+enum ServiceRequestStatus {
+  PENDING
+  RESOLVED
+  CANCELLED
+}
+
+enum AnalyticsEventType {
+  QR_SCAN
+  DISH_VIEW
+  DISH_CLICK
+  ADD_DISH
+  ORDER_SENT
+  WAITER_CALL
+  BILL_REQUEST
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  ARCHIVE
+  LOGIN
+  LOGOUT
+  RESOLVE
+}
+
+model User {
+  id                    String                   @id @default(cuid())
+  email                 String                   @unique
+  name                  String
+  passwordHash          String
+  platformAdmin         Boolean                  @default(false)
+  status                UserStatus               @default(ACTIVE)
+  createdAt             DateTime                 @default(now())
+  lastLoginAt           DateTime?
+  organizationMemberships OrganizationMembership[]
+  locationMemberships   LocationMembership[]
+  resolvedRequests      ServiceRequest[]         @relation("ResolvedBy")
+  auditLogs             AuditLog[]
+}
+
+model Organization {
+  id          String                   @id @default(cuid())
+  name        String
+  slug        String                   @unique
+  createdAt   DateTime                 @default(now())
+  updatedAt   DateTime                 @updatedAt
+  locations   Location[]
+  memberships OrganizationMembership[]
+  auditLogs   AuditLog[]
+}
+
+model OrganizationMembership {
+  id             String           @id @default(cuid())
+  userId         String
+  organizationId String
+  role           OrganizationRole @default(ADMIN)
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  @@unique([userId, organizationId])
+}
+
+model Location {
+  id             String               @id @default(cuid())
+  organizationId String
+  name           String
+  slug           String               @unique
+  address        String               @default("")
+  currency       String               @default("ARS") @db.Char(3)
+  timezone       String               @default("America/Argentina/Buenos_Aires")
+  status         LocationStatus       @default(ACTIVE)
+  tagline        String               @default("")
+  logoPath       String?
+  serviceWaiter  Boolean              @default(true)
+  serviceBill    Boolean              @default(true)
+  themePrimary   String               @default("#173d31")
+  themeAccent    String               @default("#f0b44d")
+  themePaper     String               @default("#f6f0e5")
+  themeName      String               @default("Oliva editorial")
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+  organization   Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  memberships    LocationMembership[]
+  menus          Menu[]
+  tables         Table[]
+  orders         Order[]
+  requests       ServiceRequest[]
+  events         AnalyticsEvent[]
+  media          Media[]
+  auditLogs      AuditLog[]
+  @@unique([organizationId, name])
+}
+
+model LocationMembership {
+  id         String       @id @default(cuid())
+  userId     String
+  locationId String
+  role       LocationRole @default(MANAGER)
+  user       User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  location   Location     @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  @@unique([userId, locationId])
+}
+
+model Menu {
+  id         String     @id @default(cuid())
+  locationId String
+  name       String     @default("Carta principal")
+  active     Boolean    @default(true)
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+  location   Location   @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  categories Category[]
+  dishes     Dish[]
+  @@unique([locationId, name])
+}
+
+model Category {
+  id        String   @id @default(cuid())
+  menuId    String
+  name      String
+  sortOrder Int      @default(0)
+  menu      Menu     @relation(fields: [menuId], references: [id], onDelete: Cascade)
+  dishes    Dish[]
+  @@unique([menuId, name])
+}
+
+model Dish {
+  id          String           @id @default(cuid())
+  publicId    String
+  menuId      String
+  categoryId  String?
+  name        String
+  description String           @default("")
+  priceCents  Int
+  badge       String?
+  available   Boolean          @default(true)
+  sortOrder   Int              @default(0)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  menu        Menu             @relation(fields: [menuId], references: [id], onDelete: Cascade)
+  category    Category?        @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  media       Media[]
+  orderItems  OrderItem[]
+  events      AnalyticsEvent[]
+  @@unique([menuId, publicId])
+  @@index([menuId, available, sortOrder])
+}
+
+model Media {
+  id         String   @id @default(cuid())
+  locationId String
+  dishId     String?
+  kind       String
+  path       String
+  originalName String
+  mimeType   String
+  bytes      BigInt
+  durationSeconds Decimal? @db.Decimal(8, 2)
+  width      Int?
+  height     Int?
+  published  Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  location   Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  dish       Dish?    @relation(fields: [dishId], references: [id], onDelete: Cascade)
+  @@index([locationId, kind])
+}
+
+model Table {
+  id         String   @id @default(cuid())
+  locationId String
+  label      String
+  publicToken String  @unique
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  archivedAt DateTime?
+  location   Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  orders     Order[]
+  requests   ServiceRequest[]
+  events     AnalyticsEvent[]
+  @@unique([locationId, label])
+  @@index([locationId, active])
+}
+
+model Order {
+  id             String      @id @default(cuid())
+  locationId     String
+  tableId        String
+  visitorSession String?
+  status         OrderStatus @default(NEW)
+  totalCents     Int
+  notes          String?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+  location       Location    @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  table          Table       @relation(fields: [tableId], references: [id], onDelete: Restrict)
+  items          OrderItem[]
+  @@index([locationId, status, createdAt])
+}
+
+model OrderItem {
+  id             String @id @default(cuid())
+  orderId        String
+  dishId         String
+  dishName       String
+  unitPriceCents Int
+  quantity       Int
+  order          Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  dish           Dish   @relation(fields: [dishId], references: [id], onDelete: Restrict)
+  @@index([orderId])
+}
+
+model ServiceRequest {
+  id          String               @id @default(cuid())
+  locationId  String
+  tableId     String
+  type        ServiceRequestType
+  status      ServiceRequestStatus @default(PENDING)
+  visitorSession String?
+  createdAt   DateTime             @default(now())
+  resolvedAt  DateTime?
+  resolvedById String?
+  location    Location             @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  table       Table                @relation(fields: [tableId], references: [id], onDelete: Restrict)
+  resolvedBy  User?                @relation("ResolvedBy", fields: [resolvedById], references: [id], onDelete: SetNull)
+  @@index([locationId, status, createdAt])
+}
+
+model AnalyticsEvent {
+  id             String             @id @default(cuid())
+  locationId     String
+  tableId        String?
+  dishId         String?
+  visitorSession String?
+  type           AnalyticsEventType
+  durationMs     Int?
+  metadata       Json?
+  ipHash         String?
+  createdAt      DateTime           @default(now())
+  location       Location           @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  table          Table?             @relation(fields: [tableId], references: [id], onDelete: SetNull)
+  dish           Dish?              @relation(fields: [dishId], references: [id], onDelete: SetNull)
+  @@index([locationId, type, createdAt])
+  @@index([dishId, createdAt])
+}
+
+model AuditLog {
+  id             String      @id @default(cuid())
+  organizationId String
+  locationId     String?
+  userId         String?
+  action         AuditAction
+  entityType     String
+  entityId       String?
+  metadata       Json?
+  createdAt      DateTime    @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  location       Location?   @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  user           User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  @@index([organizationId, createdAt])
+}
