@@ -84,8 +84,22 @@ export const cartiaApi = {
     form.append("logo", file);
     return request("logo/upload", { method: "POST", csrf, body: form });
   },
-  restaurants: () => request("admin/restaurants"),
-  createRestaurant: (restaurant, csrf) => request("admin/restaurants", { method: "POST", csrf, body: restaurant }),
+  organizations: () => request("organizations"),
+  createOrganization: (organization, csrf) => request("organizations", { method: "POST", csrf, body: organization }),
+  organization: (id) => request(`organizations/${id}`),
+  organizationUsers: (id) => request(`organizations/${id}/users`),
+  createOrganizationUser: (id, user, csrf) => request(`organizations/${id}/users`, { method: "POST", csrf, body: user }),
+  updateUser: (id, user, csrf) => request(`users/${id}`, { method: "PATCH", csrf, body: user }),
+  selectLocation: (locationId, csrf) => request("auth/select-location", { method: "POST", csrf, body: { locationId } }),
+  // Compatibility shape for the current admin screen while it migrates to organizations.
+  restaurants: async () => {
+    const data = await request("organizations");
+    return { restaurants: data.organizations.flatMap((organization) => organization.locations.map((location) => ({ ...location, organizationId: organization.id, organizationName: organization.name, table_count: 0, dish_count: 0 }))) };
+  },
+  createRestaurant: async (restaurant, csrf) => {
+    const data = await request("organizations", { method: "POST", csrf, body: { name: restaurant.restaurantName, locationName: restaurant.restaurantName, tagline: restaurant.tagline, ownerName: restaurant.adminName, ownerEmail: restaurant.email, ownerPassword: restaurant.password } });
+    return { restaurant: { ...data.location, name: data.organization.name, slug: data.location.slug, status: "ACTIVE", table_count: 0, dish_count: 0 } };
+  },
   uploadVideo(file, dish, metadata, csrf, onProgress) {
     return new Promise((resolve, reject) => {
       const form = new FormData();

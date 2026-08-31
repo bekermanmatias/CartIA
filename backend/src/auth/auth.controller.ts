@@ -2,10 +2,11 @@ import { Body, Controller, Get, Post, Req } from '@nestjs/common';
 import { Request } from 'express';
 import { AuthService } from './auth.service';
 import { ensureCsrf, requireCsrf, requireUserId } from '../common/security';
+import { AccessService } from '../access/access.service';
 
 @Controller('api/v1/auth')
 export class AuthController {
-  constructor(private readonly auth: AuthService) {}
+  constructor(private readonly auth: AuthService, private readonly access: AccessService) {}
 
   @Post('login')
   async login(@Body() body: { email?: string; password?: string }, @Req() request: Request) {
@@ -16,10 +17,19 @@ export class AuthController {
     return { ok: true, user: await this.auth.payload(user.id), csrf: ensureCsrf(request) };
   }
 
+  @Post('select-location')
+  async selectLocation(@Req() request: Request, @Body() body: { locationId?: string }) {
+    requireCsrf(request);
+    const userId = requireUserId(request);
+    const location = await this.access.activeLocation(userId, body.locationId);
+    request.session.activeLocationId = location.id;
+    return { ok: true, location: { id: location.id, name: location.name, slug: location.slug }, user: await this.auth.payload(userId, location.id) };
+  }
+
   @Get('me')
   async me(@Req() request: Request) {
     if (!request.session?.userId) return { ok: true, authenticated: false, user: null, csrf: null };
-    return { ok: true, authenticated: true, user: await this.auth.payload(request.session.userId), csrf: ensureCsrf(request) };
+    return { ok: true, authenticated: true, user: await this.auth.payload(request.session.userId, request.session.activeLocationId), csrf: ensureCsrf(request) };
   }
 
   @Post('logout')

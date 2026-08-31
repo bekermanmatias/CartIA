@@ -229,21 +229,23 @@ function usePersistentState(key, initialValue) {
   return [value, setValue];
 }
 
-function AppHeader({ onRequests }) {
+function AppHeader({ onRequests, user, activeLocationId, onSelectLocation }) {
+  const locations = user?.locations || [];
+  const active = locations.find((location) => location.id === activeLocationId) || locations[0];
   return (
     <header className="app-header">
       <a className="brand" href="#" aria-label="CartIA, ir al inicio">
         <span>Cart</span>
         <span className="brand-accent">IA</span>
       </a>
-      <button className="restaurant-switch" type="button">
-        <span className="restaurant-mark">LO</span>
-        <span className="restaurant-copy">
-          <small>Restaurante</small>
-          <strong>La Oliva</strong>
-        </span>
+      {locations.length > 0 ? <label className="restaurant-switch" aria-label="Sucursal activa">
+        <span className="restaurant-mark">{active?.name?.slice(0, 2).toUpperCase() || "LO"}</span>
+        <span className="restaurant-copy"><small>Sucursal activa</small><strong>{active?.name || "La Oliva"}</strong></span>
+        <select value={active?.id || ""} onChange={(event) => onSelectLocation?.(event.target.value)} aria-label="Cambiar sucursal">
+          {locations.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}
+        </select>
         <CaretDown size={15} weight="bold" />
-      </button>
+      </label> : <button className="restaurant-switch" type="button"><span className="restaurant-mark">LO</span><span className="restaurant-copy"><small>Restaurante</small><strong>La Oliva</strong></span><CaretDown size={15} weight="bold" /></button>}
       <div className="header-spacer" />
       <button className="pending-button" type="button" onClick={onRequests}>
         <span className="pending-pulse" />
@@ -1690,6 +1692,7 @@ export function App() {
   const [authStatus, setAuthStatus] = useState("loading");
   const [csrf, setCsrf] = useState("");
   const [currentUser, setCurrentUser] = useState(null);
+  const [activeLocationId, setActiveLocationId] = useState(null);
   const [appError, setAppError] = useState("");
   const [restaurant, setRestaurant] = useState({ name: "La Oliva", slug: "la-oliva", tagline: "Cocina mediterránea" });
   const [activeTable, setActiveTable] = useState(null);
@@ -1725,6 +1728,7 @@ export function App() {
     if (data.tables) setTables(data.tables);
     if (data.csrf) setCsrf(data.csrf);
     if (data.user) setCurrentUser(data.user);
+    if (data.user?.locationId) setActiveLocationId(data.user.locationId);
   };
 
   const loadRequests = async () => {
@@ -1770,6 +1774,7 @@ export function App() {
           const clientData = await cartiaApi.restaurants();
           if (!cancelled) {
             setCurrentUser(session.user);
+            setActiveLocationId(session.user.locationId || session.user.locations?.[0]?.id || null);
             setCsrf(session.csrf || "");
             setClients(clientData.restaurants || []);
             setAuthStatus("superadmin");
@@ -1833,6 +1838,7 @@ export function App() {
     const session = await cartiaApi.login(email, password);
     setCsrf(session.csrf || "");
     setCurrentUser(session.user || null);
+    setActiveLocationId(session.user?.locationId || session.user?.locations?.[0]?.id || null);
     if (session.user?.role === "superadmin") {
       const clientData = await cartiaApi.restaurants();
       setClients(clientData.restaurants || []);
@@ -1855,6 +1861,15 @@ export function App() {
     if (authStatus !== "superadmin") return;
     const response = await cartiaApi.createRestaurant(draft, csrf);
     setClients((current) => [{ ...response.restaurant, status: "active", table_count: 0, dish_count: 0 }, ...current]);
+  };
+  const selectLocation = async (locationId) => {
+    if (!connected || !locationId || locationId === activeLocationId) return;
+    const response = await cartiaApi.selectLocation(locationId, csrf);
+    setActiveLocationId(locationId);
+    setCurrentUser(response.user);
+    const data = await cartiaApi.bootstrap();
+    applyBootstrap(data);
+    await loadRequests();
   };
   const saveDish = async (dish) => {
     if (!connected) return {};
@@ -1929,7 +1944,7 @@ export function App() {
 
   return (
     <div className="app-shell">
-      <AppHeader onRequests={() => setDrawer("requests")} />
+      <AppHeader user={currentUser} activeLocationId={activeLocationId} onSelectLocation={selectLocation} onRequests={() => setDrawer("requests")} />
       {railVisible && screen !== "admin" && <RequestRail onOpenRoom={openRoom} onDismiss={() => setRailVisible(false)} />}
       <div className={`app-body ${railVisible && screen !== "admin" ? "has-rail" : ""}`}>
         <Sidebar active={screen} onNavigate={navigate} />

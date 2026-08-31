@@ -21,6 +21,7 @@ enum LocationRole {
 
 enum UserStatus {
   ACTIVE
+  SUSPENDED
   DISABLED
 }
 
@@ -75,12 +76,17 @@ model User {
   passwordHash          String
   platformAdmin         Boolean                  @default(false)
   status                UserStatus               @default(ACTIVE)
+  mustChangePassword    Boolean                  @default(false)
   createdAt             DateTime                 @default(now())
   lastLoginAt           DateTime?
+  passwordChangedAt     DateTime?
+  createdById            String?
   organizationMemberships OrganizationMembership[]
   locationMemberships   LocationMembership[]
   resolvedRequests      ServiceRequest[]         @relation("ResolvedBy")
   auditLogs             AuditLog[]
+  createdUsers           User[]                   @relation("UserCreator")
+  createdBy               User?                    @relation("UserCreator", fields: [createdById], references: [id], onDelete: SetNull)
 }
 
 model Organization {
