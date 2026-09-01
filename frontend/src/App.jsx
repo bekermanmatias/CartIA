@@ -456,12 +456,15 @@ function PeriodSelect({ value, onChange }) {
   );
 }
 
-function CartaScreen({ menuDishes, onMenuDishes, onToast, onOpenGuest, onSaveDish }) {
+function CartaScreen({ menuDishes, categories, onMenuDishes, onCategories, onToast, onOpenGuest, onSaveDish, onArchiveDish, onReorderDishes, onSaveCategory, onArchiveCategory, onReorderCategories, onRefresh }) {
   const [category, setCategory] = useState("Recomendados");
   const [selected, setSelected] = useState(0);
   const [view, setView] = useState("catalog");
   const [editingDish, setEditingDish] = useState(null);
-  const availableDishes = menuDishes.filter((dish) => dish.available);
+  const activeDishes = menuDishes.filter((dish) => !dish.archived);
+  const archivedDishes = menuDishes.filter((dish) => dish.archived);
+  const availableDishes = activeDishes.filter((dish) => dish.available);
+  const activeCategories = categories.filter((item) => !item.archived);
   const featuredDish = availableDishes.find((dish) => dish.id === "burrata") || availableDishes[0];
 
   const addItem = (name) => {
@@ -516,6 +519,32 @@ function CartaScreen({ menuDishes, onMenuDishes, onToast, onOpenGuest, onSaveDis
     }
   };
 
+  const archiveDish = async (dish, archive) => {
+    if (archive && !window.confirm(`¿Archivar ${dish.name}? Se conservará el historial y podrá restaurarse.`)) return;
+    try { await onArchiveDish(dish.databaseId, archive); onMenuDishes((current) => current.map((item) => item.databaseId === dish.databaseId ? { ...item, archived: archive, available: archive ? false : item.available } : item)); } catch (error) { onToast(error.message || "No se pudo actualizar el plato"); }
+  };
+  const moveDish = async (dish, direction) => {
+    const ordered = [...activeDishes]; const index = ordered.findIndex((item) => item.databaseId === dish.databaseId); const target = index + direction;
+    if (target < 0 || target >= ordered.length) return;
+    [ordered[index], ordered[target]] = [ordered[target], ordered[index]];
+    try { await onReorderDishes(ordered.map((item) => item.databaseId)); onMenuDishes([...ordered, ...archivedDishes]); } catch (error) { onToast(error.message || "No se pudo guardar el orden"); }
+  };
+  const saveCategory = async (category) => {
+    const name = window.prompt(category ? "Nombre de categoría" : "Nueva categoría", category?.name || "");
+    if (!name?.trim()) return;
+    try { await onSaveCategory({ id: category?.id, name }); await onRefresh(); } catch (error) { onToast(error.message || "No se pudo guardar la categoría"); }
+  };
+  const archiveCategory = async (category, archive) => {
+    if (archive && !window.confirm(`¿Archivar ${category.name}? Sus platos pasarán a Sin categoría.`)) return;
+    try { await onArchiveCategory(category.id, archive); await onRefresh(); } catch (error) { onToast(error.message || "No se pudo actualizar la categoría"); }
+  };
+  const moveCategory = async (category, direction) => {
+    const ordered = [...activeCategories]; const index = ordered.findIndex((item) => item.id === category.id); const target = index + direction;
+    if (target < 0 || target >= ordered.length) return;
+    [ordered[index], ordered[target]] = [ordered[target], ordered[index]];
+    try { await onReorderCategories(ordered.map((item) => item.id)); onCategories((current) => [...ordered, ...current.filter((item) => item.archived)]); } catch (error) { onToast(error.message || "No se pudo guardar el orden"); }
+  };
+
   return (
     <main className="screen carta-screen">
       <section className="carta-toolbar">
@@ -553,7 +582,7 @@ function CartaScreen({ menuDishes, onMenuDishes, onToast, onOpenGuest, onSaveDis
           <div className="catalog-summary">
             <div>
               <span className="catalog-summary-icon"><ForkKnife size={21} weight="duotone" /></span>
-              <div><strong>{menuDishes.length}</strong><small>Platos totales</small></div>
+              <div><strong>{activeDishes.length}</strong><small>Platos activos</small></div>
             </div>
             <div>
               <span className="catalog-summary-icon green"><CheckCircle size={21} weight="duotone" /></span>
@@ -569,7 +598,7 @@ function CartaScreen({ menuDishes, onMenuDishes, onToast, onOpenGuest, onSaveDis
               <div><p className="eyebrow">CATÁLOGO</p><h2>Platos publicados</h2></div>
               <span>Ordenados como los ve tu cliente</span>
             </div>
-            {menuDishes.map((dish) => (
+            {activeDishes.map((dish, index) => (
               <article className={`catalog-dish ${!dish.available ? "is-hidden" : ""}`} key={dish.id}>
                 <img src={dish.image} alt={dish.name} />
                 <div className="catalog-dish-main">
@@ -589,8 +618,16 @@ function CartaScreen({ menuDishes, onMenuDishes, onToast, onOpenGuest, onSaveDis
                 <button className="catalog-edit" type="button" onClick={() => setEditingDish({ ...dish, isNew: false })}>
                   <PencilSimple size={17} /> Editar
                 </button>
+                <button className="catalog-edit" type="button" disabled={index === 0} onClick={() => moveDish(dish, -1)}>↑</button>
+                <button className="catalog-edit" type="button" disabled={index === activeDishes.length - 1} onClick={() => moveDish(dish, 1)}>↓</button>
+                <button className="catalog-edit" type="button" onClick={() => archiveDish(dish, true)}>Archivar</button>
               </article>
             ))}
+            <div className="catalog-list-heading"><div><p className="eyebrow">CATEGORÍAS</p><h2>Orden y visibilidad</h2></div><button className="secondary-button" type="button" onClick={() => saveCategory(null)}>Nueva categoría</button></div>
+            {activeCategories.map((item, index) => <article className="catalog-dish" key={item.id}><div className="catalog-dish-main"><h3>{item.name}</h3><p>Orden {index + 1}</p></div><button className="catalog-edit" type="button" onClick={() => saveCategory(item)}>Renombrar</button><button className="catalog-edit" type="button" disabled={index === 0} onClick={() => moveCategory(item, -1)}>↑</button><button className="catalog-edit" type="button" disabled={index === activeCategories.length - 1} onClick={() => moveCategory(item, 1)}>↓</button>{item.name !== "Sin categoría" && <button className="catalog-edit" type="button" onClick={() => archiveCategory(item, true)}>Archivar</button>}</article>)}
+            {(archivedDishes.length || categories.some((item) => item.archived)) && <div className="catalog-list-heading"><div><p className="eyebrow">ARCHIVADOS</p><h2>Restaurar contenido</h2></div></div>}
+            {archivedDishes.map((dish) => <article className="catalog-dish is-hidden" key={dish.databaseId}><div className="catalog-dish-main"><h3>{dish.name}</h3><p>Plato archivado</p></div><button className="catalog-edit" type="button" onClick={() => archiveDish(dish, false)}>Restaurar</button></article>)}
+            {categories.filter((item) => item.archived).map((item) => <article className="catalog-dish is-hidden" key={item.id}><div className="catalog-dish-main"><h3>{item.name}</h3><p>Categoría archivada</p></div><button className="catalog-edit" type="button" onClick={() => archiveCategory(item, false)}>Restaurar</button></article>)}
           </div>
         </section>
       ) : (
@@ -707,6 +744,7 @@ function CartaScreen({ menuDishes, onMenuDishes, onToast, onOpenGuest, onSaveDis
       {editingDish && (
         <DishEditor
           dish={editingDish}
+          categories={activeCategories}
           onClose={() => setEditingDish(null)}
           onSave={saveDish}
         />
@@ -715,7 +753,7 @@ function CartaScreen({ menuDishes, onMenuDishes, onToast, onOpenGuest, onSaveDis
   );
 }
 
-function DishEditor({ dish, onClose, onSave }) {
+function DishEditor({ dish, categories = [], onClose, onSave }) {
   const [draft, setDraft] = useState(dish);
   const imageInputRef = useRef(null);
   const update = (field, value) => setDraft((current) => ({ ...current, [field]: value }));
@@ -743,7 +781,7 @@ function DishEditor({ dish, onClose, onSave }) {
           <label>Descripción<textarea value={draft.detail} onChange={(event) => update("detail", event.target.value)} rows="3" placeholder="Ingredientes y una descripción breve" /></label>
           <div className="dish-form-row">
             <label>Precio<input value={draft.price} onChange={(event) => update("price", event.target.value)} placeholder="$18.900" /></label>
-            <label>Categoría<select value={draft.category} onChange={(event) => update("category", event.target.value)}><option>Entradas</option><option>Principales</option><option>Postres</option><option>Bebidas</option></select></label>
+            <label>Categoría<select value={draft.category} onChange={(event) => update("category", event.target.value)}>{categories.map((item) => <option key={item.id} value={item.name}>{item.name}</option>)}</select></label>
           </div>
           <label>Etiqueta<input value={draft.badge} onChange={(event) => update("badge", event.target.value)} placeholder="Ej. Favorito, Vegano" /></label>
           <label className="dish-visible-toggle"><span><strong>Visible en la carta</strong><small>Podés ocultarlo temporalmente si se agota.</small></span><input type="checkbox" checked={draft.available} onChange={(event) => update("available", event.target.checked)} /><i /></label>
@@ -1145,7 +1183,7 @@ function TableQrModal({ table, onClose, onToast }) {
   );
 }
 
-function MesasScreen({ onToast, tables, requests, onAddTable, onResolveRequest }) {
+function MesasScreen({ onToast, tables, requests, orders, onAddTable, onResolveRequest, onUpdateOrder }) {
   const [newTable, setNewTable] = useState("");
   const [creating, setCreating] = useState(false);
   const [selectedTable, setSelectedTable] = useState(null);
@@ -1173,6 +1211,17 @@ function MesasScreen({ onToast, tables, requests, onAddTable, onResolveRequest }
       onToast(error.message || "No se pudo resolver la solicitud");
     }
   };
+  const changeOrder = async (order, status) => {
+    if (status === "CANCELLED" && !window.confirm(`¿Cancelar el pedido de ${order.table}?`)) return;
+    try { await onUpdateOrder(order, status); onToast(status === "CANCELLED" ? "Pedido cancelado" : `Pedido de ${order.table} actualizado`); } catch (error) { onToast(error.message || "No se pudo actualizar el pedido"); }
+  };
+  const columns = [
+    { status: "NEW", label: "Nuevos", action: "PREPARING", actionLabel: "Preparar" },
+    { status: "PREPARING", label: "En preparación", action: "READY", actionLabel: "Marcar listo" },
+    { status: "READY", label: "Listos", action: "DELIVERED", actionLabel: "Entregar" },
+    { status: "DELIVERED", label: "Entregados", action: null, actionLabel: "" },
+  ];
+  const visibleStatus = (status) => status === "ACCEPTED" ? "PREPARING" : status;
   return (
     <main className="screen secondary-screen">
       <section className="screen-heading">
@@ -1188,12 +1237,12 @@ function MesasScreen({ onToast, tables, requests, onAddTable, onResolveRequest }
         <div className="requests-list">
           <div className="section-title-row"><h2>Solicitudes pendientes</h2><span>{requests.length}</span></div>
           {requests.map((item) => {
-            const Icon = item.kind === "order" ? ForkKnife : item.requestType === "bill" ? Receipt : BellSimple;
-            const accent = item.kind === "order" ? "green" : item.requestType === "bill" ? "wine" : "saffron";
+            const Icon = item.requestType === "bill" ? Receipt : BellSimple;
+            const accent = item.requestType === "bill" ? "wine" : "saffron";
             return <article className="request-card" key={`${item.kind}-${item.id}`}>
               <span className={`request-card-icon ${accent}`}><Icon size={21} weight="fill" /></span>
               <div><strong>{item.table}</strong><p>{item.type}</p>{item.summary && <span className="request-summary">{item.summary}</span>}<small>{item.total ? `${item.total} · ` : ""}{item.time}</small></div>
-              <button type="button" onClick={() => resolve(item)}><CheckCircle size={18} /> {item.kind === "order" ? "Aceptar" : "Resolver"}</button>
+              <button type="button" onClick={() => resolve(item)}><CheckCircle size={18} /> Resolver</button>
             </article>
           })}
           {!requests.length && <div className="empty-state"><CheckCircle size={30} /><strong>Todo al día</strong><p>No hay solicitudes pendientes.</p></div>}
@@ -1211,6 +1260,10 @@ function MesasScreen({ onToast, tables, requests, onAddTable, onResolveRequest }
             })}
           </div>
         </div>
+      </section>
+      <section className="catalog-manager order-board">
+        <div className="section-title-row"><div><p className="eyebrow">PEDIDOS</p><h2>Cocina y salón</h2></div><span>{orders.length} activos</span></div>
+        <div className="order-columns">{columns.map((column) => <section className="order-column" key={column.status}><h3>{column.label}<span>{orders.filter((order) => visibleStatus(order.status) === column.status).length}</span></h3>{orders.filter((order) => visibleStatus(order.status) === column.status).map((order) => <article className="request-card" key={order.id}><div><strong>{order.table}</strong><p>{order.summary}</p><small>{order.total}{order.notes ? ` · ${order.notes}` : ""}</small></div>{column.action && <button type="button" onClick={() => changeOrder(order, column.action)}>{column.actionLabel}</button>}{column.status !== "DELIVERED" && <button type="button" className="text-button" onClick={() => changeOrder(order, "CANCELLED")}>Cancelar</button>}</article>)}{!orders.some((order) => visibleStatus(order.status) === column.status) && <p className="heading-copy">Sin pedidos.</p>}</section>)}</div>
       </section>
       {selectedTable && <TableQrModal table={selectedTable} onClose={() => setSelectedTable(null)} onToast={onToast} />}
     </main>
@@ -1705,6 +1758,7 @@ export function App() {
   const [drawer, setDrawer] = useState(null);
   const [toast, setToast] = useState("");
   const [menuDishes, setMenuDishes] = usePersistentState("cartia-menu-dishes", initialMenuDishes);
+  const [categories, setCategories] = useState(() => [...new Set(initialMenuDishes.map((dish) => dish.category))].map((name, index) => ({ id: `demo-category-${index}`, name, sortOrder: index, archived: false })));
   const [serviceOptions, setServiceOptions] = usePersistentState("cartia-service-options", { waiter: true, bill: true });
   const [visualTheme, setVisualTheme] = usePersistentState("cartia-visual-theme", {
     primary: "#173d31",
@@ -1730,8 +1784,8 @@ export function App() {
   const [requests, setRequests] = useState([
     { id: 1, kind: "service", requestType: "waiter", table: "Mesa 12", type: "Llama al mozo", time: "hace 1 min" },
     { id: 2, kind: "service", requestType: "bill", table: "Mesa 4", type: "Pidió la cuenta", time: "hace 3 min" },
-    { id: 3, kind: "order", requestType: "order", table: "Mesa 8", type: "Nuevo pedido", summary: "2× Burrata · 1× Pulpo", total: "$51.300", time: "hace 4 min" },
   ]);
+  const [orders, setOrders] = useState([{ id: 3, table: "Mesa 8", status: "NEW", summary: "2× Burrata · 1× Pulpo", total: "$51.300", createdAt: new Date().toISOString() }]);
   const [clients, setClients] = useState([
     { id: 1, name: "La Oliva", slug: "la-oliva", status: "active", table_count: 16, dish_count: 6 },
     { id: 2, name: "Casa Nona", slug: "casa-nona", status: "active", table_count: 12, dish_count: 24 },
@@ -1747,6 +1801,7 @@ export function App() {
       setMenuDishes(data.dishes);
       setPublishedVideos(Object.fromEntries(data.dishes.filter((dish) => dish.video).map((dish) => [dish.id, dish.video])));
     }
+    if (data.categories) setCategories(data.categories);
     if (data.serviceOptions) setServiceOptions(data.serviceOptions);
     if (data.visualTheme) setVisualTheme(data.visualTheme);
     if (data.tables) setTables(data.tables);
@@ -1756,8 +1811,9 @@ export function App() {
   };
 
   const loadRequests = async () => {
-    const data = await cartiaApi.requests();
-    setRequests(data.requests || []);
+    const data = await cartiaApi.operations();
+    setRequests(data.serviceRequests || []);
+    setOrders(data.orders || []);
   };
 
   const loadAnalytics = async () => {
@@ -1924,8 +1980,18 @@ export function App() {
   };
   const resolveRequest = async (item) => {
     if (connected) await cartiaApi.resolveRequest(item, csrf);
-    setRequests((current) => current.filter((request) => !(request.id === item.id && request.kind === item.kind)));
+    setRequests((current) => current.filter((request) => request.id !== item.id));
   };
+  const updateOrderStatus = async (order, status) => {
+    if (connected) await cartiaApi.updateOrderStatus(order.id, status, csrf);
+    setOrders((current) => current.filter((item) => status !== "CANCELLED" || item.id !== order.id).map((item) => item.id === order.id ? { ...item, status } : item));
+  };
+  const archiveDish = (id, archive) => cartiaApi.archiveDish(id, archive, csrf);
+  const reorderDishes = (ids) => cartiaApi.reorderDishes(ids, csrf);
+  const saveCategory = (category) => cartiaApi.saveCategory(category, csrf);
+  const archiveCategory = (id, archive) => cartiaApi.archiveCategory(id, archive, csrf);
+  const reorderCategories = (ids) => cartiaApi.reorderCategories(ids, csrf);
+  const refreshCatalog = async () => { if (!connected) return; applyBootstrap(await cartiaApi.bootstrap()); };
   const uploadVideo = async (file, dish, metadata, onProgress) => {
     const response = await cartiaApi.uploadVideo(file, dish, metadata, csrf, onProgress);
     return response.video;
@@ -1967,9 +2033,9 @@ export function App() {
   }
 
   let content;
-  if (screen === "carta") content = <CartaScreen menuDishes={menuDishes} onMenuDishes={setMenuDishes} onToast={showToast} onOpenGuest={() => navigate("menu")} onSaveDish={saveDish} />;
+  if (screen === "carta") content = <CartaScreen menuDishes={menuDishes} categories={categories} onMenuDishes={setMenuDishes} onCategories={setCategories} onToast={showToast} onOpenGuest={() => navigate("menu")} onSaveDish={saveDish} onArchiveDish={archiveDish} onReorderDishes={reorderDishes} onSaveCategory={saveCategory} onArchiveCategory={archiveCategory} onReorderCategories={reorderCategories} onRefresh={refreshCatalog} />;
   else if (screen === "analitica") content = <AnaliticaScreen period={period} onPeriod={setPeriod} />;
-  else if (screen === "mesas") content = <MesasScreen onToast={showToast} tables={tables} requests={requests} onAddTable={addTable} onResolveRequest={resolveRequest} />;
+  else if (screen === "mesas") content = <MesasScreen onToast={showToast} tables={tables} requests={requests} orders={orders} onAddTable={addTable} onResolveRequest={resolveRequest} onUpdateOrder={updateOrderStatus} />;
   else if (screen === "estilo") content = <StyleScreen onToast={showToast} serviceOptions={serviceOptions} onServiceOptions={setServiceOptions} visualTheme={visualTheme} onVisualTheme={setVisualTheme} onOpenGuest={() => navigate("menu")} restaurant={restaurant} onUploadLogo={uploadLogo} />;
   else if (screen === "contenido") content = <ContentScreen onToast={showToast} onOpenGuest={() => navigate("menu")} publishedVideos={publishedVideos} onPublishVideos={setPublishedVideos} menuDishes={menuDishes} connected={connected} onUploadVideo={uploadVideo} />;
   else if (screen === "admin") content = <AdminScreen onToast={showToast} clients={clients} onCreateRestaurant={createRestaurant} onLoadUsers={loadOrganizationUsers} onCreateUser={createOrganizationUser} />;

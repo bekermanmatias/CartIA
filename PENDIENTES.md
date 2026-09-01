@@ -36,9 +36,9 @@ Cada tarea debe cerrarse con evidencia: código, test, comando ejecutado o verif
 | en progreso | Acceso a varias sucursales | Un usuario con dos membresías puede consultar y operar ambas sin cruzar datos | Probar cambio de contexto con dos locales reales | Permisos |
 | en progreso | Selector de sucursal | El panel muestra las sucursales permitidas y cambia el contexto sin relogin | Completar estados visuales y recarga del panel | API de memberships |
 | en progreso | Roles | OWNER, ADMIN, MANAGER, STAFF, VIEWER tienen permisos explícitos y testeados | Publicar matriz de permisos y aplicarla a cada endpoint | Auth |
-| pendiente | Gestión completa de carta | Menús, categorías, platos, precios, disponibilidad y orden se gestionan por sucursal | Completar CRUD y validaciones | Aislamiento |
+| terminado | Gestión operativa de carta | Platos y categorías se crean, editan, archivan, restauran y reordenan por sucursal | Validar el flujo con el primer restaurante beta | PostgreSQL, R2 |
 | en progreso | Mesas y QR | Cada mesa tiene token aleatorio no adivinable y todas las operaciones validan slug/token/estado | Agregar rotación y revocación de tokens | Prisma |
-| en progreso | Flujo operativo en tiempo real | QR → menú → pedido/llamado → SSE → resolución funciona en E2E | Ejecutar un pedido/llamado real desde QR y verificar actualización SSE visual | SSE, tests |
+| en progreso | Flujo operativo en tiempo real | QR → menú → pedido/llamado → tablero de estados → resolución funciona en E2E | Ejecutar un pedido/llamado real desde QR y verificar actualización SSE visual | SSE, tests |
 | terminado | Media persistente en R2 | Los archivos sobreviven a recreaciones, se reemplazan de forma segura y se sirven con caché larga | Configurar dominio propio cuando salga de beta | Cloudflare R2 |
 | pendiente | Backups y recuperación | Backup previo al release, retención y restauración documentada funcionan en una prueba | Probar `vps-release.sh` con dump/restauración | VPS |
 | pendiente | Observabilidad | Logs JSON, health autenticable, Sentry y alertas básicas están activos | Configurar DSN y documentación de monitoreo | Producción |
@@ -68,6 +68,13 @@ Cada tarea debe cerrarse con evidencia: código, test, comando ejecutado o verif
 7. Validar el pipeline completo de CI/CD y el procedimiento de backup/rollback.
 
 ## Registro de sesiones
+
+### 2026-09-01 — Carta administrable y pedidos por estado
+
+- Estado: `terminado` para gestión de carta; `en progreso` para la validación E2E visual de operación.
+- Cambios: platos y categorías ahora se archivan/restauran y se reordenan; una categoría archivada mueve sus platos a `Sin categoría`; el panel incorpora tablero de pedidos `Nuevo → En preparación → Listo → Entregado` y cancelación confirmada.
+- Verificación: migración Prisma `20260901113000_catalog_archive_and_order_flow` aplicada; typecheck y 8 tests backend correctos; build frontend correcto; prueba local de archivo/restauración correcta; pedido QR de prueba llegó a `DELIVERED`.
+- Pendientes descubiertos: prueba visual desde celular con SSE y decidir una pantalla histórica de pedidos entregados/cancelados.
 
 ### 2026-09-01 — R2 y operación de restaurante
 

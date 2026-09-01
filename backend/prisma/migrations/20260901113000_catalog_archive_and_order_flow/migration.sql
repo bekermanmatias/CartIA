@@ -1,0 +1,2 @@
+ALTER TABLE "Category" ADD COLUMN "archivedAt" TIMESTAMP(3);
+ALTER TABLE "Dish" ADD COLUMN "archivedAt" TIMESTAMP(3);

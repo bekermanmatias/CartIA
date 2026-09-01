@@ -65,6 +65,8 @@ export const cartiaApi = {
   createTable: (label, csrf) => request("tables", { method: "POST", csrf, body: { label } }),
   archiveTable: (id, csrf) => request("tables/archive", { method: "POST", csrf, body: { id } }),
   requests: () => request("requests"),
+  operations: () => request("operations"),
+  updateOrderStatus: (id, status, csrf) => request(`orders/${id}/status`, { method: "POST", csrf, body: { status } }),
   analytics: (days = 7) => request("analytics", { query: { days } }),
   resolveRequest: (item, csrf) => request("requests/resolve", {
     method: "POST", csrf, body: { id: item.id, kind: item.kind },
@@ -73,6 +75,11 @@ export const cartiaApi = {
     method: "POST", csrf, body: { serviceOptions, visualTheme },
   }),
   saveDish: (dish, csrf) => request("dishes/save", { method: "POST", csrf, body: dish }),
+  archiveDish: (id, archive, csrf) => request("dishes/archive", { method: "POST", csrf, body: { id, archive } }),
+  reorderDishes: (ids, csrf) => request("dishes/reorder", { method: "POST", csrf, body: { ids } }),
+  saveCategory: (category, csrf) => request("categories/save", { method: "POST", csrf, body: category }),
+  archiveCategory: (id, archive, csrf) => request("categories/archive", { method: "POST", csrf, body: { id, archive } }),
+  reorderCategories: (ids, csrf) => request("categories/reorder", { method: "POST", csrf, body: { ids } }),
   adminEvents: (onEvent) => {
     const source = new EventSource(`${API_ENDPOINT}/admin/events`, { withCredentials: true });
     source.addEventListener("order.created", onEvent);

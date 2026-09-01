@@ -5289,6 +5289,41 @@ button:disabled {
   background: rgba(255, 255, 255, 0.74);
 }
 
+.order-columns {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(220px, 1fr));
+  gap: 14px;
+  overflow-x: auto;
+  padding-top: 16px;
+}
+
+.order-column {
+  min-height: 210px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: #fffdf9;
+}
+
+.order-column h3 {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 0 0 12px;
+  font: 600 22px/1 var(--serif);
+}
+
+.order-column h3 span {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  font: 700 11px/1 var(--sans);
+  color: var(--green);
+  background: #e5eee7;
+}
+
 @media (max-width: 920px) {
   .auth-card {
     grid-template-columns: 1fr;
