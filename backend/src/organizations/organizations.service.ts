@@ -4,11 +4,20 @@ import * as bcrypt from 'bcrypt';
 import { randomBytes } from 'crypto';
 import { AccessService } from '../access/access.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { slugify } from '../common/security';
+import { publicLocationUrl, reservedLocationSlugs, slugify } from '../common/security';
 
 @Injectable()
 export class OrganizationsService {
   constructor(private readonly prisma: PrismaService, private readonly access: AccessService) {}
+
+  private locationSlug(value: string | undefined, fallback: string) {
+    const raw = value?.trim().toLowerCase();
+    const slug = raw || slugify(fallback);
+    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug) || slug.length > 80 || reservedLocationSlugs.has(slug)) {
+      throw new BadRequestException('El subdominio debe usar letras, números y guiones, y no puede estar reservado.');
+    }
+    return slug;
+  }
 
   private async audit(data: { organizationId: string; locationId?: string; userId: string; action: 'CREATE' | 'UPDATE' | 'ARCHIVE'; entityType: string; entityId?: string; metadata?: object }) {
     await this.prisma.auditLog.create({ data: { ...data, action: data.action } });
@@ -30,7 +39,7 @@ export class OrganizationsService {
     if (!name || !ownerEmail || !input.ownerPassword || input.ownerPassword.length < 10) throw new BadRequestException('Completa empresa, responsable, email y una contraseña de al menos 10 caracteres.');
     const slug = slugify(input.slug || name);
     const locationName = input.locationName?.trim() || name;
-    const locationSlug = slugify(input.locationSlug || `${slug}-principal`);
+    const locationSlug = this.locationSlug(input.locationSlug, `${slug}-principal`);
     const passwordHash = await bcrypt.hash(input.ownerPassword, 12);
     try {
       const result = await this.prisma.$transaction(async (tx) => {
@@ -43,7 +52,7 @@ export class OrganizationsService {
         await tx.auditLog.create({ data: { organizationId: organization.id, userId, action: 'CREATE', entityType: 'Organization', entityId: organization.id, metadata: { ownerId: owner.id } } });
         return { organization, location, owner: { id: owner.id, name: owner.name, email: owner.email } };
       });
-      return { ok: true, ...result };
+      return { ok: true, ...result, publicUrl: publicLocationUrl(result.location.slug) };
     } catch (error: any) {
       if (error?.code === 'P2002') throw new BadRequestException('El slug o email ya está en uso.');
       throw error;
@@ -61,7 +70,7 @@ export class OrganizationsService {
     await this.access.requireOrganization(userId, organizationId, 'organization.update');
     if (!input.name?.trim()) throw new BadRequestException('El local necesita un nombre.');
     try {
-      const location = await this.prisma.location.create({ data: { organizationId, name: input.name.trim(), slug: slugify(input.slug || input.name), address: input.address?.trim() || '' }, });
+      const location = await this.prisma.location.create({ data: { organizationId, name: input.name.trim(), slug: this.locationSlug(input.slug, input.name), address: input.address?.trim() || '' }, });
       await this.prisma.menu.create({ data: { locationId: location.id, name: 'Carta principal' } });
       await this.audit({ organizationId, locationId: location.id, userId, action: 'CREATE', entityType: 'Location', entityId: location.id });
       return { ok: true, location: this.locationSummary(location) };
@@ -119,5 +128,5 @@ export class OrganizationsService {
 
   async disableUser(actorId: string, userId: string, organizationId: string) { return this.updateUser(actorId, userId, { organizationId, status: UserStatus.DISABLED }); }
 
-  private locationSummary(location: { id: string; organizationId: string; name: string; slug: string; address: string; status: any }) { return { id: location.id, organizationId: location.organizationId, name: location.name, slug: location.slug, address: location.address, status: location.status }; }
+  private locationSummary(location: { id: string; organizationId: string; name: string; slug: string; address: string; status: any }) { return { id: location.id, organizationId: location.organizationId, name: location.name, slug: location.slug, publicUrl: publicLocationUrl(location.slug), address: location.address, status: location.status }; }
 }

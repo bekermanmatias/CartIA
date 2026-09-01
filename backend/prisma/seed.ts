@@ -35,18 +35,16 @@ async function main() {
     where: { menuId_name: { menuId: menu.id, name: 'Principales' } }, update: {}, create: { menuId: menu.id, name: 'Principales' },
   });
   const dishes = [
-    ['burrata', 'Burrata de estación', 'Tomates asados, pesto y pan de masa madre.', 14800, '/assets/food-burrata.jpg'],
-    ['risotto', 'Risotto de hongos', 'Arroz cremoso, hongos de bosque y parmesano.', 18200, '/assets/food-risotto.jpg'],
-    ['asado', 'Ojo de bife', 'Papas crocantes, chimichurri de hierbas y jugo de carne.', 24500, '/assets/food-steak.jpg'],
+    ['burrata', 'Burrata de estación', 'Tomates asados, pesto y pan de masa madre.', 14800],
+    ['risotto', 'Risotto de hongos', 'Arroz cremoso, hongos de bosque y parmesano.', 18200],
+    ['asado', 'Ojo de bife', 'Papas crocantes, chimichurri de hierbas y jugo de carne.', 24500],
   ] as const;
-  for (const [publicId, name, description, priceCents, path] of dishes) {
-    const dish = await prisma.dish.upsert({
+  for (const [publicId, name, description, priceCents] of dishes) {
+    await prisma.dish.upsert({
       where: { menuId_publicId: { menuId: menu.id, publicId } },
       update: { name, description, priceCents, categoryId: category.id, available: true },
       create: { menuId: menu.id, categoryId: category.id, publicId, name, description, priceCents, sortOrder: dishes.findIndex((item) => item[0] === publicId) },
     });
-    const media = await prisma.media.findFirst({ where: { dishId: dish.id, kind: 'IMAGE' } });
-    if (!media) await prisma.media.create({ data: { locationId: location.id, dishId: dish.id, kind: 'IMAGE', path, originalName: path.split('/').pop()!, mimeType: 'image/jpeg', bytes: BigInt(0) } });
   }
   for (let number = 1; number <= 12; number += 1) {
     const label = `Mesa ${number}`;

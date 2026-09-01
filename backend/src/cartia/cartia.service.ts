@@ -2,7 +2,7 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException 
 import { AnalyticsEventType, OrderStatus, Prisma, ServiceRequestType } from '@prisma/client';
 import { randomBytes, createHash } from 'crypto';
 import { Subject } from 'rxjs';
-import { slugify } from '../common/security';
+import { publicLocationUrl, slugify } from '../common/security';
 import { PrismaService } from '../prisma/prisma.service';
 import { AccessService, Permission } from '../access/access.service';
 
@@ -45,7 +45,7 @@ export class CartiaService {
     const location = await this.locationForUser(userId, locationId, 'location.read');
     const menu = await this.prisma.menu.findFirst({ where: { locationId: location.id, active: true }, include: { categories: { orderBy: { sortOrder: 'asc' } }, dishes: { include: { category: true, media: true }, orderBy: { sortOrder: 'asc' } } } });
     const tables = await this.prisma.table.findMany({ where: { locationId: location.id }, orderBy: { createdAt: 'asc' } });
-    return { ok: true, restaurant: { id: location.id, name: location.name, slug: location.slug, tagline: location.tagline, logo: location.logoPath }, categories: (menu?.categories ?? []).map((category) => ({ id: category.id, name: category.name, sortOrder: category.sortOrder, archived: Boolean(category.archivedAt) })), dishes: (menu?.dishes ?? []).map((dish) => this.formatDish(dish)), tables: tables.map((table) => ({ id: table.id, label: table.label, token: table.publicToken, active: table.active, menuUrl: `/?r=${location.slug}&t=${table.publicToken}#menu` })), serviceOptions: { waiter: location.serviceWaiter, bill: location.serviceBill }, visualTheme: { primary: location.themePrimary, accent: location.themeAccent, paper: location.themePaper, name: location.themeName } };
+    return { ok: true, restaurant: { id: location.id, name: location.name, slug: location.slug, publicUrl: publicLocationUrl(location.slug), tagline: location.tagline, logo: location.logoPath }, categories: (menu?.categories ?? []).map((category) => ({ id: category.id, name: category.name, sortOrder: category.sortOrder, archived: Boolean(category.archivedAt) })), dishes: (menu?.dishes ?? []).map((dish) => this.formatDish(dish)), tables: tables.map((table) => ({ id: table.id, label: table.label, token: table.publicToken, active: table.active, menuUrl: publicLocationUrl(location.slug, table.publicToken) })), serviceOptions: { waiter: location.serviceWaiter, bill: location.serviceBill }, visualTheme: { primary: location.themePrimary, accent: location.themeAccent, paper: location.themePaper, name: location.themeName } };
   }
 
   async publicMenu(slug: string, token: string, visitor?: string) {
@@ -59,7 +59,7 @@ export class CartiaService {
     const location = await this.locationForUser(userId, locationId, 'tables.manage');
     if (!label.trim() || label.length > 60) throw new BadRequestException('Escribe un nombre de mesa válido.');
     const table = await this.prisma.table.create({ data: { locationId: location.id, label: label.trim(), publicToken: randomBytes(32).toString('hex') } });
-    return { ok: true, table: { id: table.id, label: table.label, token: table.publicToken, active: table.active, menuUrl: `/?r=${location.slug}&t=${table.publicToken}#menu` } };
+    return { ok: true, table: { id: table.id, label: table.label, token: table.publicToken, active: table.active, menuUrl: publicLocationUrl(location.slug, table.publicToken) } };
   }
 
   async archiveTable(userId: string, id: string, locationId?: string) {

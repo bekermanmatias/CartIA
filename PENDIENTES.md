@@ -104,3 +104,54 @@ Pendientes descubiertos:
 ## Criterio de salida a producción
 
 CartIA estará lista cuando React funcione desde `frontend/`, NestJS/Prisma desde `backend/`, PostgreSQL sea la única base runtime, varias sucursales operen simultáneamente sin cruces de datos, QR/pedidos/llamados/SSE funcionen de punta a punta, los uploads sean seguros y persistentes, CI/CD despliegue desde `main`, y existan backups, rollback y monitoreo probados.
+## PRÓXIMO BLOQUE — BETA OPERATIVA
+| Estado | Tarea | Criterio de aceptación | Próxima acción | Dependencias |
+|---|---|---|---|---|
+| en progreso | Validación E2E con celular | QR → carta → pedido/llamado → panel → resolución funciona sin recargar; el pedido avanza por NEW → PREPARING → READY → DELIVERED | Probar una mesa real desde dos pestañas y documentar evidencia | Docker dev, SSE |
+| pendiente | Compose de producción | API, frontend Nginx, PostgreSQL privado y configuración persistente levantan correctamente | Crear `compose.production.yml` compatible con `scripts/vps-release.sh` | Docker |
+| pendiente | Documentación VPS | La instalación, HTTPS, variables, migraciones, backup y rollback están documentados para NestJS/PostgreSQL/R2 | Actualizar `DOCKER.md` y `HOSTINGER.md` | Compose productivo |
+| pendiente | Backup y restauración | Se genera dump antes del release y se restaura correctamente en una base de prueba | Ejecutar y documentar una prueba de backup/restore | VPS, PostgreSQL |
+| pendiente | Primer deploy beta | Un merge a `main` publica imágenes SHA, aplica migraciones, verifica healthchecks y deja la versión accesible | Configurar secrets de GitHub y variables de producción | GitHub Actions, VPS |
+| pendiente | Prueba con restaurante | Un administrador carga carta/media, crea mesas y opera pedidos durante una jornada de prueba | Preparar checklist y datos iniciales del primer local | Beta operativa |
+### Registro — Priorización para beta real
+- Carta, pedidos y media R2: `terminado`.
+- Validación E2E y deploy de producción: `en progreso`/`pendiente`.
+- Decisión: priorizar el flujo operativo desde celular y el primer deploy VPS antes de sumar seguridad avanzada, Redis/WebSockets o mejoras secundarias.
+- Criterio de beta: un restaurante puede cargar su carta, recibir pedidos y llamados, cambiar estados y operar con datos persistentes en el VPS.
+## Actualización — Compose portable de producción
+
+- Estado: `terminado`.
+- Cambio: se agregó `compose.production.yml` con servicios `db`, `api` y `web`, PostgreSQL no expuesto, volúmenes persistentes para base/media, healthchecks y configuración por variables.
+- Compatibilidad: acepta `API_IMAGE` y `WEB_IMAGE` para releases inmutables desde GHCR; sin esas variables puede construir imágenes locales.
+- Próximo paso: configurar el VPS y ejecutar el primer release con backup, migraciones y healthchecks.
+## Auditoría de dinamismo — resultado
+
+- Estado: `pendiente`.
+- El flujo conectado ya usa NestJS, PostgreSQL y R2 para autenticación, carta, media, mesas, pedidos, llamados y configuración.
+- Persisten datos iniciales de demo en `frontend/src/App.jsx`: platos, videos, mesas, pedidos, llamados, clientes y analítica de ejemplo. Se reemplazan al cargar la API, pero deben quedar aislados detrás de `VITE_DEMO_MODE=true`.
+- `localStorage` conserva estados de demo de carta, opciones y tema; no es la fuente de verdad del restaurante conectado, pero debe limpiarse o deshabilitarse fuera del modo demo.
+- La edición de categorías todavía usa `prompt/confirm`; es funcional, pero requiere una interfaz formal para una experiencia de restaurante real.
+- Próxima acción: ejecutar una prueba de aceptación con datos nuevos, eliminar cualquier fallback visible en modo conectado y luego desplegar la beta en VPS.
+## Limpieza de demo y sandbox persistente — 2026-09-01
+
+- Estado: `terminado`.
+- Se eliminaron del frontend los fallbacks de carta, videos, mesas, pedidos, llamados, clientes, analítica y `localStorage`; la aplicación conectada obtiene su estado únicamente de la API.
+- Se reemplazaron los `prompt/confirm` de categorías por un modal con validación y confirmación visual.
+- Nuevo comando: `npm --prefix backend run sandbox:reset`. Solo reinicia la organización `cartia-demo`, carga fixtures en R2 y deja operaciones/analítica vacías.
+- Evidencia: sandbox recreado localmente con 6 platos, 12 mesas y 12 objetos R2; 0 pedidos, 0 llamados y 0 eventos. Typecheck backend, 11 tests, build frontend y build de imágenes Docker correctos.
+- Próxima acción: prueba QR desde celular contra el sandbox y luego configuración del primer VPS beta.
+
+## Subdominios automáticos por sucursal — 2026-09-01
+
+- Estado: `terminado` en aplicación y configuración portable; `pendiente` el aprovisionamiento real del DNS/certificado en el VPS.
+- Cambios: cada `Location.slug` genera una URL pública `https://{slug}.cartia.ar`; el alta de restaurante propone un subdominio editable, valida formato/reservas/unicidad y muestra la URL final. Los QR nuevos solo incluyen el token de mesa y usan ese host.
+- Resolución: NestJS obtiene la sucursal desde el encabezado `Host`; conserva `?r=slug&t=token` como compatibilidad temporal para QR existentes y desarrollo local. `cartia.ar` muestra landing, `app.cartia.ar` sirve el panel y los demás subdominios sirven la carta pública con el mismo build React.
+- Infraestructura: Nginx de producción redirige HTTP a HTTPS, preserva `Host` hacia la API y monta certificados wildcard fuera de Git. `compose.production.yml`, CI y `.env.example` aceptan dominio, origen de plataforma y rutas TLS. La guía concreta está en `deploy/SUBDOMAINS.md`.
+- Evidencia: typecheck backend correcto, 13 tests backend, build frontend, `docker compose -f compose.production.yml config --quiet` y build de la imagen web de producción correctos. Resta validar DNS/TLS en el VPS.
+- Próxima acción: crear `A @`, `A *` y `A app` hacia el VPS, instalar/renovar `cartia.ar` + `*.cartia.ar`, y realizar la prueba QR desde un subdominio real.
+
+## UI dinámica de operación — 2026-09-01
+
+- Estado: `terminado`.
+- Cambios: header, avatar, selector de sucursal, contador y franja de sala se alimentan de usuario, sucursal y `/operations`; la franja se oculta sin actividad y vuelve a mostrarse ante una operación nueva. Se eliminaron las referencias visibles de restaurantes demo en carta pública y previsualizaciones.
+- Evidencia: build del frontend y 13 tests backend correctos; no permanecen en React los textos `La Oliva`, `Cocina mediterránea`, `Buenos Aires`, mesas ficticias ni el contador fijo.

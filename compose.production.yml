@@ -1,0 +1,76 @@
+name: cartia
+
+# Portable production compose. It can build locally or run immutable images
+# supplied through API_IMAGE and WEB_IMAGE by CI/CD.
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-cartia}
+      POSTGRES_USER: ${POSTGRES_USER:-cartia}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  api:
+    image: ${API_IMAGE:-cartia-api:local}
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+    env_file:
+      - ./backend/.env
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: postgresql://${POSTGRES_USER:-cartia}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-cartia}?schema=public
+      APP_URL: ${APP_URL:-http://localhost}
+      PUBLIC_BASE_DOMAIN: ${PUBLIC_BASE_DOMAIN:-}
+      PUBLIC_PROTOCOL: ${PUBLIC_PROTOCOL:-https}
+      UPLOAD_DIR: /app/uploads
+    volumes:
+      - media_data:/app/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+    restart: unless-stopped
+
+  web:
+    image: ${WEB_IMAGE:-cartia-web:local}
+    build:
+      context: .
+      dockerfile: docker/web.production.Dockerfile
+      args:
+        VITE_ROOT_DOMAIN: ${PUBLIC_BASE_DOMAIN:-cartia.ar}
+        VITE_PLATFORM_ORIGIN: ${VITE_PLATFORM_ORIGIN:-https://app.cartia.ar}
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+    volumes:
+      - media_data:/var/www/uploads:ro
+      - ${TLS_CERT_PATH:-./deploy/tls/fullchain.pem}:/etc/nginx/tls/fullchain.pem:ro
+      - ${TLS_KEY_PATH:-./deploy/tls/privkey.pem}:/etc/nginx/tls/privkey.pem:ro
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "--quiet", "http://127.0.0.1/"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  media_data:

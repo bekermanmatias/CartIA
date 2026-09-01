@@ -10,7 +10,7 @@ docker compose -f compose.production.yml pull api web
 docker compose -f compose.production.yml run --rm api npx prisma migrate deploy
 docker compose -f compose.production.yml up -d --remove-orphans
 for attempt in 1 2 3 4 5 6; do
-  wget -qO- http://127.0.0.1/api/v1/health >/dev/null && exit 0
+  docker compose -f compose.production.yml exec -T api node -e "fetch('http://127.0.0.1:3000/api/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))" && exit 0
   sleep 5
 done
 exit 1

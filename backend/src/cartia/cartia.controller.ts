@@ -1,7 +1,7 @@
 import { Body, Controller, Get, MessageEvent, Param, Post, Query, Req, Sse } from '@nestjs/common';
 import { Request } from 'express';
 import { filter, map, Observable } from 'rxjs';
-import { requireCsrf, requireUserId } from '../common/security';
+import { locationSlugFromHost, requireCsrf, requireUserId } from '../common/security';
 import { CartiaService } from './cartia.service';
 
 @Controller('api/v1')
@@ -27,10 +27,11 @@ export class CartiaController {
   @Post('categories/archive') archiveCategory(@Req() request: Request, @Body() body: { id?: string; archive?: boolean }) { requireCsrf(request); return this.cartia.archiveCategory(requireUserId(request), body.id ?? '', body.archive !== false, request.session.activeLocationId); }
   @Post('categories/reorder') reorderCategories(@Req() request: Request, @Body() body: { ids?: string[] }) { requireCsrf(request); return this.cartia.reorderCategories(requireUserId(request), body.ids ?? [], request.session.activeLocationId); }
 
-  @Get('public/menu') menu(@Query('r') restaurant: string, @Query('t') tableToken: string, @Query('v') visitor?: string) { return this.cartia.publicMenu(restaurant, tableToken, visitor); }
-  @Post('public/request') publicRequest(@Body() body: { restaurant?: string; tableToken?: string; type?: string; visitorSession?: string }) { return this.cartia.publicServiceRequest(body); }
-  @Post('public/order') publicOrder(@Body() body: { restaurant?: string; tableToken?: string; visitorSession?: string; items?: { dishId?: string; quantity?: number }[]; notes?: string }) { return this.cartia.publicOrder(body); }
-  @Post('public/event') publicEvent(@Body() body: { restaurant?: string; tableToken?: string; visitorSession?: string; type?: string; dishId?: string; durationMs?: number }) { return this.cartia.publicEvent(body); }
+  private publicSlug(request: Request, legacy?: string) { return locationSlugFromHost(request.hostname) ?? legacy ?? ''; }
+  @Get('public/menu') menu(@Req() req: Request, @Query('r') restaurant: string, @Query('t') tableToken: string, @Query('v') visitor?: string) { return this.cartia.publicMenu(this.publicSlug(req, restaurant), tableToken, visitor); }
+  @Post('public/request') publicRequest(@Req() req: Request, @Body() body: { restaurant?: string; tableToken?: string; type?: string; visitorSession?: string }) { return this.cartia.publicServiceRequest({ ...body, restaurant: this.publicSlug(req, body.restaurant) }); }
+  @Post('public/order') publicOrder(@Req() req: Request, @Body() body: { restaurant?: string; tableToken?: string; visitorSession?: string; items?: { dishId?: string; quantity?: number }[]; notes?: string }) { return this.cartia.publicOrder({ ...body, restaurant: this.publicSlug(req, body.restaurant) }); }
+  @Post('public/event') publicEvent(@Req() req: Request, @Body() body: { restaurant?: string; tableToken?: string; visitorSession?: string; type?: string; dishId?: string; durationMs?: number }) { return this.cartia.publicEvent({ ...body, restaurant: this.publicSlug(req, body.restaurant) }); }
 
   @Sse('admin/events')
   async events(@Req() request: Request): Promise<Observable<MessageEvent>> {

@@ -13,7 +13,14 @@ jobs:
       - uses: docker/build-push-action@v6
         with: { context: ., file: docker/api.Dockerfile, push: true, tags: ghcr.io/${{ github.repository_owner }}/cartia-api:${{ github.sha }} }
       - uses: docker/build-push-action@v6
-        with: { context: ., file: docker/web.Dockerfile, push: true, tags: ghcr.io/${{ github.repository_owner }}/cartia-web:${{ github.sha }} }
+        with:
+          context: .
+          file: docker/web.production.Dockerfile
+          push: true
+          tags: ghcr.io/${{ github.repository_owner }}/cartia-web:${{ github.sha }}
+          build-args: |
+            VITE_ROOT_DOMAIN=${{ vars.PUBLIC_BASE_DOMAIN || 'cartia.ar' }}
+            VITE_PLATFORM_ORIGIN=https://app.${{ vars.PUBLIC_BASE_DOMAIN || 'cartia.ar' }}
       - uses: appleboy/ssh-action@v1.2.2
         env:
           API_IMAGE: ghcr.io/${{ github.repository_owner }}/cartia-api:${{ github.sha }}

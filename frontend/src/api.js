@@ -48,19 +48,19 @@ export const cartiaApi = {
   logout: (csrf) => request("auth/logout", { method: "POST", csrf }),
   bootstrap: () => request("bootstrap"),
   publicMenu: ({ restaurant, tableToken }) => request("public/menu", {
-    query: { r: restaurant, t: tableToken, v: getVisitorSession() },
+    query: { ...(restaurant ? { r: restaurant } : {}), t: tableToken, v: getVisitorSession() },
   }),
   serviceRequest: ({ restaurant, tableToken, type }) => request("public/request", {
     method: "POST",
-    body: { restaurant, tableToken, type, visitorSession: getVisitorSession() },
+    body: { ...(restaurant ? { restaurant } : {}), tableToken, type, visitorSession: getVisitorSession() },
   }),
   order: ({ restaurant, tableToken, items, notes = "" }) => request("public/order", {
     method: "POST",
-    body: { restaurant, tableToken, items, notes, visitorSession: getVisitorSession() },
+    body: { ...(restaurant ? { restaurant } : {}), tableToken, items, notes, visitorSession: getVisitorSession() },
   }),
   event: ({ restaurant, tableToken, ...event }) => request("public/event", {
     method: "POST",
-    body: { restaurant, tableToken, visitorSession: getVisitorSession(), ...event },
+    body: { ...(restaurant ? { restaurant } : {}), tableToken, visitorSession: getVisitorSession(), ...event },
   }),
   createTable: (label, csrf) => request("tables", { method: "POST", csrf, body: { label } }),
   archiveTable: (id, csrf) => request("tables/archive", { method: "POST", csrf, body: { id } }),
@@ -112,8 +112,8 @@ export const cartiaApi = {
     return { restaurants: data.organizations.flatMap((organization) => organization.locations.map((location) => ({ ...location, organizationId: organization.id, organizationName: organization.name, table_count: 0, dish_count: 0 }))) };
   },
   createRestaurant: async (restaurant, csrf) => {
-    const data = await request("organizations", { method: "POST", csrf, body: { name: restaurant.restaurantName, locationName: restaurant.restaurantName, tagline: restaurant.tagline, ownerName: restaurant.adminName, ownerEmail: restaurant.email, ownerPassword: restaurant.password } });
-    return { restaurant: { ...data.location, name: data.organization.name, slug: data.location.slug, status: "ACTIVE", table_count: 0, dish_count: 0 } };
+    const data = await request("organizations", { method: "POST", csrf, body: { name: restaurant.restaurantName, locationName: restaurant.restaurantName, locationSlug: restaurant.locationSlug, tagline: restaurant.tagline, ownerName: restaurant.adminName, ownerEmail: restaurant.email, ownerPassword: restaurant.password } });
+    return { restaurant: { ...data.location, name: data.organization.name, slug: data.location.slug, publicUrl: data.publicUrl, status: "ACTIVE", table_count: 0, dish_count: 0 } };
   },
   uploadVideo(file, dish, metadata, csrf, onProgress) {
     return new Promise((resolve, reject) => {
