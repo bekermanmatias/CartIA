@@ -73,6 +73,14 @@ export const cartiaApi = {
     method: "POST", csrf, body: { serviceOptions, visualTheme },
   }),
   saveDish: (dish, csrf) => request("dishes/save", { method: "POST", csrf, body: dish }),
+  adminEvents: (onEvent) => {
+    const source = new EventSource(`${API_ENDPOINT}/admin/events`, { withCredentials: true });
+    source.addEventListener("order.created", onEvent);
+    source.addEventListener("order.updated", onEvent);
+    source.addEventListener("service-request.created", onEvent);
+    source.addEventListener("service-request.updated", onEvent);
+    return source;
+  },
   uploadDishImage: (file, dishId, csrf) => {
     const form = new FormData();
     form.append("image", file);

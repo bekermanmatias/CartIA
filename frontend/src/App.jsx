@@ -38,7 +38,7 @@ import {
   X,
 } from "@phosphor-icons/react";
 
-const isDemoRuntime = import.meta.env.DEV || import.meta.env.VITE_DEMO_MODE === "true";
+const isDemoRuntime = import.meta.env.VITE_DEMO_MODE === "true";
 
 const dishes = [
   {
@@ -1636,13 +1636,17 @@ function ImproveDrawer({ onClose, onSave }) {
   );
 }
 
-function RequestsDrawer({ onClose, onRoom }) {
+function RequestsDrawer({ onClose, onRoom, requests }) {
   return (
     <div className="drawer-backdrop" role="presentation" onMouseDown={onClose}>
       <aside className="drawer request-drawer" role="dialog" aria-modal="true" aria-labelledby="requests-title" onMouseDown={(event) => event.stopPropagation()}>
-        <div className="drawer-header"><div><p className="eyebrow">SALA EN VIVO</p><h2 id="requests-title">2 solicitudes pendientes</h2></div><button className="icon-button" type="button" onClick={onClose} aria-label="Cerrar"><X size={20} /></button></div>
-        <article className="drawer-request"><span className="request-icon request-icon-waiter"><BellSimple size={19} weight="fill" /></span><div><strong>Mesa 12</strong><p>Llama al mozo</p><small>Hace 1 minuto</small></div></article>
-        <article className="drawer-request"><span className="request-icon request-icon-bill"><Receipt size={19} weight="fill" /></span><div><strong>Mesa 4</strong><p>Pidió la cuenta</p><small>Hace 3 minutos</small></div></article>
+        <div className="drawer-header"><div><p className="eyebrow">SALA EN VIVO</p><h2 id="requests-title">{requests.length} solicitud{requests.length === 1 ? "" : "es"} pendiente{requests.length === 1 ? "" : "s"}</h2></div><button className="icon-button" type="button" onClick={onClose} aria-label="Cerrar"><X size={20} /></button></div>
+        {requests.slice(0, 4).map((item) => {
+          const Icon = item.kind === "order" ? ForkKnife : item.requestType === "bill" ? Receipt : BellSimple;
+          const tone = item.kind === "order" ? "request-icon-order" : item.requestType === "bill" ? "request-icon-bill" : "request-icon-waiter";
+          return <article className="drawer-request" key={`${item.kind}-${item.id}`}><span className={`request-icon ${tone}`}><Icon size={19} weight="fill" /></span><div><strong>{item.table}</strong><p>{item.type}</p><small>{item.summary || "Recién recibido"}</small></div></article>;
+        })}
+        {!requests.length && <div className="empty-state"><CheckCircle size={28} /><strong>Todo al día</strong><p>No hay solicitudes pendientes.</p></div>}
         <button className="primary-button full" type="button" onClick={onRoom}>Gestionar la sala</button>
       </aside>
     </div>
@@ -1826,6 +1830,13 @@ export function App() {
   }, [authStatus]);
 
   useEffect(() => {
+    if (authStatus !== "authenticated") return undefined;
+    const source = cartiaApi.adminEvents(() => loadRequests().catch(() => null));
+    source.onerror = () => null;
+    return () => source.close();
+  }, [authStatus, activeLocationId]);
+
+  useEffect(() => {
     if (authStatus !== "authenticated") return;
     loadAnalytics().catch(() => null);
   }, [authStatus, period]);
@@ -1974,7 +1985,7 @@ export function App() {
       </div>
       <BottomNav active={screen} onNavigate={navigate} />
       {drawer === "improve" && <ImproveDrawer onClose={() => setDrawer(null)} onSave={() => { setDrawer(null); showToast("Mejora publicada en la carta"); }} />}
-      {drawer === "requests" && <RequestsDrawer onClose={() => setDrawer(null)} onRoom={openRoom} />}
+      {drawer === "requests" && <RequestsDrawer onClose={() => setDrawer(null)} onRoom={openRoom} requests={requests} />}
       <Toast message={toast} />
     </div>
   );

@@ -7,6 +7,7 @@ import { CartiaModule } from './cartia/cartia.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { AccessModule } from './access/access.module';
 import { OrganizationsModule } from './organizations/organizations.module';
+import { MediaModule } from './media/media.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { OrganizationsModule } from './organizations/organizations.module';
     OrganizationsModule,
     AuthModule,
     CartiaModule,
+    MediaModule,
   ],
 })
 export class AppModule {}

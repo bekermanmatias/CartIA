@@ -18,6 +18,8 @@ services:
     build:
       context: .
       dockerfile: docker/api.Dockerfile
+    env_file:
+      - ./backend/.env
     environment:
       NODE_ENV: production
       PORT: 3000

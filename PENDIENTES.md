@@ -23,7 +23,7 @@ Cada tarea debe cerrarse con evidencia: código, test, comando ejecutado o verif
 | en progreso | Permisos administrativos | Cada endpoint administrativo valida usuario, organización, sucursal y rol | Reemplazar las comprobaciones puntuales por una matriz de permisos y guards reutilizables | Auth |
 | en progreso | Organizaciones y sucursales | Un usuario puede pertenecer a varias organizaciones/sucursales y cambiar de contexto | Conectar la gestión visual de usuarios y locales en React | Permisos |
 | en progreso | Aislamiento multi-tenant | Ningún usuario, QR o endpoint puede leer/modificar datos de otra sucursal | Cubrir queries con tests de dos organizaciones y dos locales | Permisos, modelo Prisma |
-| pendiente | Uploads de media | Imágenes, MP4 y logos validan MIME, extensión, tamaño y contenido; se guardan por sucursal | Implementar `StorageService` filesystem con URLs `/uploads/...` | Volumen media |
+| terminado | Uploads de media en R2 | Imágenes, MP4 y logos se validan, se guardan en Cloudflare R2 y se vinculan a su sucursal | Mantener límites y evaluar carga directa firmada cuando crezca el volumen | Cloudflare R2 |
 | pendiente | Auditoría | Crear, actualizar, archivar, login y resolución generan `AuditLog` con actor y sucursal | Incorporar servicio de auditoría a comandos administrativos | Permisos |
 | terminado | Migración y seed inicial | Prisma aplica migración versionada y crea usuario demo idempotente | Ejecutar también seed en una instalación limpia de CI/VPS | PostgreSQL |
 | en progreso | Suite de pruebas | CI ejecuta unitarias, integración, aislamiento y E2E sin pasos manuales | Crear fixtures y tests negativos de dos organizaciones con PostgreSQL | CI |
@@ -38,8 +38,8 @@ Cada tarea debe cerrarse con evidencia: código, test, comando ejecutado o verif
 | en progreso | Roles | OWNER, ADMIN, MANAGER, STAFF, VIEWER tienen permisos explícitos y testeados | Publicar matriz de permisos y aplicarla a cada endpoint | Auth |
 | pendiente | Gestión completa de carta | Menús, categorías, platos, precios, disponibilidad y orden se gestionan por sucursal | Completar CRUD y validaciones | Aislamiento |
 | en progreso | Mesas y QR | Cada mesa tiene token aleatorio no adivinable y todas las operaciones validan slug/token/estado | Agregar rotación y revocación de tokens | Prisma |
-| en progreso | Flujo operativo en tiempo real | QR → menú → pedido/llamado → SSE → resolución funciona en E2E | Crear escenario automatizado de punta a punta | SSE, tests |
-| pendiente | Media persistente | Los archivos sobreviven a recreaciones y se sirven con caché larga | Implementar reemplazo y limpieza segura de archivos | Uploads |
+| en progreso | Flujo operativo en tiempo real | QR → menú → pedido/llamado → SSE → resolución funciona en E2E | Ejecutar un pedido/llamado real desde QR y verificar actualización SSE visual | SSE, tests |
+| terminado | Media persistente en R2 | Los archivos sobreviven a recreaciones, se reemplazan de forma segura y se sirven con caché larga | Configurar dominio propio cuando salga de beta | Cloudflare R2 |
 | pendiente | Backups y recuperación | Backup previo al release, retención y restauración documentada funcionan en una prueba | Probar `vps-release.sh` con dump/restauración | VPS |
 | pendiente | Observabilidad | Logs JSON, health autenticable, Sentry y alertas básicas están activos | Configurar DSN y documentación de monitoreo | Producción |
 | en progreso | Deploy a Hostinger VPS | Merge a `main` construye, publica, migra, levanta y verifica el release | Provisionar usuario SSH restringido, `.env` y Compose en VPS | GitHub Secrets |
@@ -68,6 +68,13 @@ Cada tarea debe cerrarse con evidencia: código, test, comando ejecutado o verif
 7. Validar el pipeline completo de CI/CD y el procedimiento de backup/rollback.
 
 ## Registro de sesiones
+
+### 2026-09-01 — R2 y operación de restaurante
+
+- Estado: `terminado` para uploads y media persistente; `en progreso` para validación visual completa del flujo operativo.
+- Cambios: se creó `StorageService` para Cloudflare R2, endpoints de imagen, video y logo, persistencia de `storageKey`, URLs públicas `r2.dev`, reemplazo de archivos, integración del panel existente y escucha SSE para pedidos y llamados. El modo Vite de desarrollo ahora usa la API real salvo que `VITE_DEMO_MODE=true` sea explícito.
+- Verificación: migración Prisma `20260901100000_r2_media_storage` aplicada; typecheck y tests backend correctos; build frontend correcto; R2 confirmó escritura/borrado; login → mesa QR → menú público respondió correctamente desde Docker local.
+- Pendientes descubiertos: ejecutar y documentar un pedido/llamado visual de punta a punta, completar pruebas automatizadas de uploads y configurar dominio propio de media antes de producción.
 
 ### 2026-08-31 — P0 matriz de permisos y aislamiento
 

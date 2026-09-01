@@ -202,6 +202,7 @@ model Media {
   dishId     String?
   kind       String
   path       String
+  storageKey String?
   originalName String
   mimeType   String
   bytes      BigInt
