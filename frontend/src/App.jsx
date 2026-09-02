@@ -19,6 +19,7 @@ import {
   ImageSquare,
   MagnifyingGlass,
   MagicWand,
+  Minus,
   Palette,
   PencilSimple,
   Play,
@@ -900,6 +901,10 @@ function GuestMenu({ videoAssets, menuDishes, serviceOptions, visualTheme, resta
                     Agregar
                   </button>
                   {selection[dish.id] > 0 && <strong>{selection[dish.id]} elegido{selection[dish.id] > 1 ? "s" : ""}</strong>}
+                  {selection[dish.id] > 0 && <button className="dish-reel-remove" type="button" onClick={() => changeQuantity(dish.id, -1)} aria-label={`Quitar ${dish.name}`}>
+                    <span><Minus size={19} weight="bold" /></span>
+                    Quitar
+                  </button>}
                 </div>}
                 <div className="dish-reel-copy">
                   <div className="dish-reel-meta"><span>{dish.category}</span>{dish.badge && <span>{dish.badge}</span>}</div>
@@ -948,7 +953,11 @@ function GuestMenu({ videoAssets, menuDishes, serviceOptions, visualTheme, resta
                       <p>{dish.detail}</p>
                       <div>
                         <strong>{dish.price}</strong>
-                        {canUseTableActions && <button type="button" onClick={(event) => { event.stopPropagation(); addDish(dish); }} aria-label={`Agregar ${dish.name}`}><Plus size={18} /></button>}
+                        {canUseTableActions && <div className="guest-list-actions">
+                          {selection[dish.id] > 0 && <button className="guest-list-remove" type="button" onClick={(event) => { event.stopPropagation(); changeQuantity(dish.id, -1); }} aria-label={`Quitar ${dish.name}`}><Minus size={17} weight="bold" /></button>}
+                          {selection[dish.id] > 0 && <span aria-label={`${selection[dish.id]} ${dish.name} en la selección`}>{selection[dish.id]}</span>}
+                          <button type="button" onClick={(event) => { event.stopPropagation(); addDish(dish); }} aria-label={`Agregar ${dish.name}`}><Plus size={18} /></button>
+                        </div>}
                       </div>
                     </div>
                   </article>
