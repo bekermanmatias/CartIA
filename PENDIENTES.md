@@ -118,6 +118,13 @@ CartIA estará lista cuando React funcione desde `frontend/`, NestJS/Prisma desd
 - Validación E2E y deploy de producción: `en progreso`/`pendiente`.
 - Decisión: priorizar el flujo operativo desde celular y el primer deploy VPS antes de sumar seguridad avanzada, Redis/WebSockets o mejoras secundarias.
 - Criterio de beta: un restaurante puede cargar su carta, recibir pedidos y llamados, cambiar estados y operar con datos persistentes en el VPS.
+
+### 2026-09-02 — Contexto de plataforma y administración multiempresa
+
+- Estado: `en progreso`.
+- Cambios: Platform Admin inicia en contexto `Plataforma` sin sucursal automática; Administración permite seleccionar empresa, crear/editar empresas, crear/editar/pausar locales, operar un local explícito y crear/desactivar usuarios. Los resúmenes de organizaciones y locales calculan mesas y platos desde PostgreSQL.
+- Verificación: `npm --prefix backend run typecheck` y `npm --prefix frontend run build` correctos.
+- Pendientes descubiertos: completar pruebas E2E de aislamiento con dos organizaciones y mejorar el retorno visual desde operación a Plataforma.
 ## Actualización — Compose portable de producción
 
 - Estado: `terminado`.

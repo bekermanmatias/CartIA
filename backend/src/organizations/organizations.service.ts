@@ -27,9 +27,25 @@ export class OrganizationsService {
     const actor = await this.access.actor(userId);
     const organizations = await this.prisma.organization.findMany({
       where: actor.platformAdmin ? undefined : { memberships: { some: { userId } } },
-      include: { locations: { orderBy: { name: 'asc' } } }, orderBy: { name: 'asc' },
+      include: { locations: { orderBy: { name: 'asc' }, include: { _count: { select: { tables: true } }, menus: { where: { active: true }, select: { _count: { select: { dishes: true } } } } } } }, orderBy: { name: 'asc' },
     });
-    return { ok: true, organizations: organizations.map((organization) => ({ ...organization, locations: organization.locations.map(this.locationSummary) })) };
+    return { ok: true, organizations: organizations.map((organization) => ({
+      id: organization.id, name: organization.name, slug: organization.slug, createdAt: organization.createdAt, updatedAt: organization.updatedAt,
+      status: organization.locations.some((location) => location.status === 'ACTIVE') ? 'ACTIVE' : 'PAUSED',
+      locations: organization.locations.map((location) => this.locationSummary(location)),
+      locationCount: organization.locations.length,
+      tableCount: organization.locations.reduce((sum, location) => sum + location._count.tables, 0),
+      dishCount: organization.locations.reduce((sum, location) => sum + location.menus.reduce((menuSum, menu) => menuSum + menu._count.dishes, 0), 0),
+    })) };
+  }
+
+  async update(userId: string, organizationId: string, input: { name?: string }) {
+    await this.access.requireOrganization(userId, organizationId, 'organization.update');
+    const name = input.name?.trim();
+    if (!name) throw new BadRequestException('La empresa necesita un nombre.');
+    const organization = await this.prisma.organization.update({ where: { id: organizationId }, data: { name } });
+    await this.audit({ organizationId, userId, action: 'UPDATE', entityType: 'Organization', entityId: organizationId });
+    return { ok: true, organization };
   }
 
   async create(userId: string, input: { name?: string; slug?: string; locationName?: string; locationSlug?: string; ownerName?: string; ownerEmail?: string; ownerPassword?: string }) {
@@ -61,9 +77,9 @@ export class OrganizationsService {
 
   async detail(userId: string, organizationId: string) {
     await this.access.requireOrganization(userId, organizationId, 'organization.read');
-    const organization = await this.prisma.organization.findUnique({ where: { id: organizationId }, include: { locations: { include: { memberships: { include: { user: true } } } } } });
+    const organization = await this.prisma.organization.findUnique({ where: { id: organizationId }, include: { locations: { include: { _count: { select: { tables: true } }, menus: { where: { active: true }, select: { _count: { select: { dishes: true } } } }, memberships: { include: { user: true } } } } } });
     if (!organization) throw new NotFoundException('Empresa no encontrada.');
-    return { ok: true, organization: { ...organization, locations: organization.locations.map((location) => ({ ...this.locationSummary(location), users: location.memberships.map((membership) => ({ id: membership.user.id, name: membership.user.name, email: membership.user.email, role: membership.role })) })) } };
+    return { ok: true, organization: { id: organization.id, name: organization.name, slug: organization.slug, status: organization.locations.some((location) => location.status === 'ACTIVE') ? 'ACTIVE' : 'PAUSED', locations: organization.locations.map((location) => ({ ...this.locationSummary(location), users: location.memberships.map((membership) => ({ id: membership.user.id, name: membership.user.name, email: membership.user.email, role: membership.role })), })) } };
   }
 
   async addLocation(userId: string, organizationId: string, input: { name?: string; slug?: string; address?: string }) {
@@ -116,6 +132,9 @@ export class OrganizationsService {
     await this.access.requireOrganization(actorId, organizationId, 'organization.users.manage');
     const existing = await this.prisma.user.findFirst({ where: { id: userId, organizationMemberships: { some: { organizationId } } } });
     if (!existing) throw new NotFoundException('Usuario no encontrado.');
+    if (existing.id === actorId && (input.status === UserStatus.DISABLED || input.organizationRole === 'OWNER')) throw new ForbiddenException('No puedes desactivar ni cambiar tu propio acceso de propietario.');
+    const currentMembership = await this.prisma.organizationMembership.findUnique({ where: { userId_organizationId: { userId, organizationId } } });
+    if (currentMembership?.role === 'OWNER' && !actor.platformAdmin && input.organizationRole && input.organizationRole !== 'OWNER') throw new ForbiddenException('Solo CartIA puede modificar al propietario.');
     if (input.organizationRole === 'OWNER' && !actor.platformAdmin) throw new ForbiddenException('Solo CartIA puede asignar propietarios.');
     const updated = await this.prisma.$transaction(async (tx) => {
       const user = await tx.user.update({ where: { id: userId }, data: { name: input.name?.trim() || undefined, status: input.status, passwordHash: input.password ? await bcrypt.hash(input.password, 12) : undefined, passwordChangedAt: input.password ? new Date() : undefined } });
@@ -128,5 +147,5 @@ export class OrganizationsService {
 
   async disableUser(actorId: string, userId: string, organizationId: string) { return this.updateUser(actorId, userId, { organizationId, status: UserStatus.DISABLED }); }
 
-  private locationSummary(location: { id: string; organizationId: string; name: string; slug: string; address: string; status: any }) { return { id: location.id, organizationId: location.organizationId, name: location.name, slug: location.slug, publicUrl: publicLocationUrl(location.slug), address: location.address, status: location.status }; }
+  private locationSummary(location: { id: string; organizationId: string; name: string; slug: string; address: string; status: any; _count?: { tables: number }; menus?: { _count: { dishes: number } }[] }) { return { id: location.id, organizationId: location.organizationId, name: location.name, slug: location.slug, publicUrl: publicLocationUrl(location.slug), address: location.address, status: location.status, tableCount: location._count?.tables, dishCount: location.menus?.reduce((sum, menu) => sum + menu._count.dishes, 0) }; }
 }
