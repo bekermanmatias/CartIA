@@ -48,7 +48,7 @@ export const cartiaApi = {
   logout: (csrf) => request("auth/logout", { method: "POST", csrf }),
   bootstrap: () => request("bootstrap"),
   publicMenu: ({ restaurant, tableToken }) => request("public/menu", {
-    query: { ...(restaurant ? { r: restaurant } : {}), t: tableToken, v: getVisitorSession() },
+    query: { ...(restaurant ? { r: restaurant } : {}), ...(tableToken ? { t: tableToken } : {}), v: getVisitorSession() },
   }),
   serviceRequest: ({ restaurant, tableToken, type }) => request("public/request", {
     method: "POST",
@@ -63,7 +63,7 @@ export const cartiaApi = {
     body: { ...(restaurant ? { restaurant } : {}), tableToken, visitorSession: getVisitorSession(), ...event },
   }),
   createTable: (label, csrf) => request("tables", { method: "POST", csrf, body: { label } }),
-  archiveTable: (id, csrf) => request("tables/archive", { method: "POST", csrf, body: { id } }),
+  archiveTable: (id, archive, csrf) => request("tables/archive", { method: "POST", csrf, body: { id, archive } }),
   requests: () => request("requests"),
   operations: () => request("operations"),
   updateOrderStatus: (id, status, csrf) => request(`orders/${id}/status`, { method: "POST", csrf, body: { status } }),
@@ -99,9 +99,13 @@ export const cartiaApi = {
     form.append("logo", file);
     return request("logo/upload", { method: "POST", csrf, body: form });
   },
+  removeDishMedia: (dishId, kind, csrf) => request("media/remove", { method: "POST", csrf, body: { dishId, kind } }),
   organizations: () => request("organizations"),
   createOrganization: (organization, csrf) => request("organizations", { method: "POST", csrf, body: organization }),
   organization: (id) => request(`organizations/${id}`),
+  updateOrganization: (id, organization, csrf) => request(`organizations/${id}`, { method: "PATCH", csrf, body: organization }),
+  addLocation: (organizationId, location, csrf) => request(`organizations/${organizationId}/locations`, { method: "POST", csrf, body: location }),
+  updateLocation: (id, location, csrf) => request(`locations/${id}`, { method: "PATCH", csrf, body: location }),
   organizationUsers: (id) => request(`organizations/${id}/users`),
   createOrganizationUser: (id, user, csrf) => request(`organizations/${id}/users`, { method: "POST", csrf, body: user }),
   updateUser: (id, user, csrf) => request(`users/${id}`, { method: "PATCH", csrf, body: user }),
@@ -109,11 +113,11 @@ export const cartiaApi = {
   // Compatibility shape for the current admin screen while it migrates to organizations.
   restaurants: async () => {
     const data = await request("organizations");
-    return { restaurants: data.organizations.flatMap((organization) => organization.locations.map((location) => ({ ...location, organizationId: organization.id, organizationName: organization.name, table_count: 0, dish_count: 0 }))) };
+    return { organizations: data.organizations, restaurants: data.organizations.flatMap((organization) => organization.locations.map((location) => ({ ...location, organizationId: organization.id, organizationName: organization.name, table_count: location.tableCount, dish_count: location.dishCount }))) };
   },
   createRestaurant: async (restaurant, csrf) => {
     const data = await request("organizations", { method: "POST", csrf, body: { name: restaurant.restaurantName, locationName: restaurant.restaurantName, locationSlug: restaurant.locationSlug, tagline: restaurant.tagline, ownerName: restaurant.adminName, ownerEmail: restaurant.email, ownerPassword: restaurant.password } });
-    return { restaurant: { ...data.location, name: data.organization.name, slug: data.location.slug, publicUrl: data.publicUrl, status: "ACTIVE", table_count: 0, dish_count: 0 } };
+    return { restaurant: { ...data.location, name: data.organization.name, slug: data.location.slug, publicUrl: data.publicUrl, status: "ACTIVE" } };
   },
   uploadVideo(file, dish, metadata, csrf, onProgress) {
     return new Promise((resolve, reject) => {

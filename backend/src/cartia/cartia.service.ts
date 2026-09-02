@@ -6,7 +6,7 @@ import { publicLocationUrl, slugify } from '../common/security';
 import { PrismaService } from '../prisma/prisma.service';
 import { AccessService, Permission } from '../access/access.service';
 
-type PublicContext = { location: { id: string; slug: string; name: string; tagline: string | null; logoPath: string | null; themePrimary: string; themeAccent: string; themePaper: string; themeName: string; serviceWaiter: boolean; serviceBill: boolean }; table: { id: string; label: string } };
+type PublicContext = { location: { id: string; slug: string; name: string; tagline: string | null; logoPath: string | null; themePrimary: string; themeAccent: string; themePaper: string; themeName: string; themeFont: string; serviceWaiter: boolean; serviceBill: boolean }; table: { id: string; label: string } };
 
 @Injectable()
 export class CartiaService {
@@ -45,26 +45,44 @@ export class CartiaService {
     const location = await this.locationForUser(userId, locationId, 'location.read');
     const menu = await this.prisma.menu.findFirst({ where: { locationId: location.id, active: true }, include: { categories: { orderBy: { sortOrder: 'asc' } }, dishes: { include: { category: true, media: true }, orderBy: { sortOrder: 'asc' } } } });
     const tables = await this.prisma.table.findMany({ where: { locationId: location.id }, orderBy: { createdAt: 'asc' } });
-    return { ok: true, restaurant: { id: location.id, name: location.name, slug: location.slug, publicUrl: publicLocationUrl(location.slug), tagline: location.tagline, logo: location.logoPath }, categories: (menu?.categories ?? []).map((category) => ({ id: category.id, name: category.name, sortOrder: category.sortOrder, archived: Boolean(category.archivedAt) })), dishes: (menu?.dishes ?? []).map((dish) => this.formatDish(dish)), tables: tables.map((table) => ({ id: table.id, label: table.label, token: table.publicToken, active: table.active, menuUrl: publicLocationUrl(location.slug, table.publicToken) })), serviceOptions: { waiter: location.serviceWaiter, bill: location.serviceBill }, visualTheme: { primary: location.themePrimary, accent: location.themeAccent, paper: location.themePaper, name: location.themeName } };
+    return { ok: true, restaurant: { id: location.id, name: location.name, slug: location.slug, publicUrl: publicLocationUrl(location.slug), tagline: location.tagline, logo: location.logoPath }, categories: (menu?.categories ?? []).map((category) => ({ id: category.id, name: category.name, sortOrder: category.sortOrder, archived: Boolean(category.archivedAt) })), dishes: (menu?.dishes ?? []).map((dish) => this.formatDish(dish)), tables: tables.map((table) => ({ id: table.id, label: table.label, token: table.publicToken, active: table.active, archived: Boolean(table.archivedAt), menuUrl: publicLocationUrl(location.slug, table.publicToken) })), serviceOptions: { waiter: location.serviceWaiter, bill: location.serviceBill }, visualTheme: { primary: location.themePrimary, accent: location.themeAccent, paper: location.themePaper, name: location.themeName, font: location.themeFont } };
   }
 
-  async publicMenu(slug: string, token: string, visitor?: string) {
-    const ctx = await this.context(slug, token);
-    const menu = await this.prisma.menu.findFirstOrThrow({ where: { locationId: ctx.location.id, active: true }, include: { dishes: { where: { available: true, archivedAt: null }, include: { category: true, media: true }, orderBy: { sortOrder: 'asc' } } } });
-    await this.prisma.analyticsEvent.create({ data: { locationId: ctx.location.id, tableId: ctx.table.id, visitorSession: visitor?.slice(0, 64), type: 'QR_SCAN' } });
-    return { ok: true, restaurant: { id: ctx.location.id, name: ctx.location.name, slug: ctx.location.slug, tagline: ctx.location.tagline, logo: ctx.location.logoPath }, table: { id: ctx.table.id, label: ctx.table.label }, dishes: menu.dishes.map((dish) => this.formatDish(dish)), serviceOptions: { waiter: ctx.location.serviceWaiter, bill: ctx.location.serviceBill }, visualTheme: { primary: ctx.location.themePrimary, accent: ctx.location.themeAccent, paper: ctx.location.themePaper, name: ctx.location.themeName } };
+  async publicMenu(slug: string, token?: string, visitor?: string) {
+    if (!slug) throw new NotFoundException('Restaurante no encontrado.');
+
+    const context = token ? await this.context(slug, token) : null;
+    const location = context?.location ?? await this.prisma.location.findFirst({ where: { slug, status: 'ACTIVE' } });
+    if (!location) throw new NotFoundException('Restaurante no encontrado.');
+
+    const menu = await this.prisma.menu.findFirst({ where: { locationId: location.id, active: true }, include: { dishes: { where: { available: true, archivedAt: null }, include: { category: true, media: true }, orderBy: { sortOrder: 'asc' } } } });
+    if (!menu) throw new NotFoundException('Este restaurante no tiene una carta activa.');
+
+    if (context) {
+      await this.prisma.analyticsEvent.create({ data: { locationId: location.id, tableId: context.table.id, visitorSession: visitor?.slice(0, 64), type: 'QR_SCAN' } });
+    }
+
+    return { ok: true, restaurant: { id: location.id, name: location.name, slug: location.slug, tagline: location.tagline, logo: location.logoPath }, table: context ? { id: context.table.id, label: context.table.label } : null, dishes: menu.dishes.map((dish) => this.formatDish(dish)), serviceOptions: { waiter: location.serviceWaiter, bill: location.serviceBill }, visualTheme: { primary: location.themePrimary, accent: location.themeAccent, paper: location.themePaper, name: location.themeName, font: location.themeFont } };
   }
 
   async createTable(userId: string, label: string, locationId?: string) {
     const location = await this.locationForUser(userId, locationId, 'tables.manage');
     if (!label.trim() || label.length > 60) throw new BadRequestException('Escribe un nombre de mesa válido.');
-    const table = await this.prisma.table.create({ data: { locationId: location.id, label: label.trim(), publicToken: randomBytes(32).toString('hex') } });
+    let table;
+    try {
+      table = await this.prisma.table.create({ data: { locationId: location.id, label: label.trim(), publicToken: randomBytes(32).toString('hex') } });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') throw new BadRequestException('Ya existe una mesa con ese nombre.');
+      throw error;
+    }
     return { ok: true, table: { id: table.id, label: table.label, token: table.publicToken, active: table.active, menuUrl: publicLocationUrl(location.slug, table.publicToken) } };
   }
 
-  async archiveTable(userId: string, id: string, locationId?: string) {
+  async archiveTable(userId: string, id: string, archive: boolean, locationId?: string) {
     const location = await this.locationForUser(userId, locationId, 'tables.manage');
-    await this.prisma.table.updateMany({ where: { id, locationId: location.id }, data: { active: false, archivedAt: new Date() } });
+    const table = await this.prisma.table.findFirst({ where: { id, locationId: location.id } });
+    if (!table) throw new NotFoundException('La mesa no pertenece a la sucursal activa.');
+    await this.prisma.table.update({ where: { id }, data: { active: !archive, archivedAt: archive ? new Date() : null } });
     return { ok: true };
   }
 
@@ -104,28 +122,36 @@ export class CartiaService {
     return { ok: true, order: { id: updated.id, status: updated.status } };
   }
 
-  async saveSettings(userId: string, input: { serviceOptions?: { waiter?: boolean; bill?: boolean }; visualTheme?: { primary?: string; accent?: string; paper?: string; name?: string } }, locationId?: string) {
+  async saveSettings(userId: string, input: { serviceOptions?: { waiter?: boolean; bill?: boolean }; visualTheme?: { primary?: string; accent?: string; paper?: string; name?: string; font?: string } }, locationId?: string) {
     const location = await this.locationForUser(userId, locationId, 'location.manage');
     const color = (value: string | undefined, fallback: string) => /^#[0-9a-f]{6}$/i.test(value ?? '') ? value!.toLowerCase() : fallback;
-    await this.prisma.location.update({ where: { id: location.id }, data: { serviceWaiter: Boolean(input.serviceOptions?.waiter), serviceBill: Boolean(input.serviceOptions?.bill), themePrimary: color(input.visualTheme?.primary, location.themePrimary), themeAccent: color(input.visualTheme?.accent, location.themeAccent), themePaper: color(input.visualTheme?.paper, location.themePaper), themeName: input.visualTheme?.name?.trim().slice(0, 80) || location.themeName } });
+    const fonts = ['Elegante editorial', 'Moderna limpia', 'Clásica cálida'];
+    const font = fonts.includes(input.visualTheme?.font ?? '') ? input.visualTheme!.font! : location.themeFont;
+    await this.prisma.location.update({ where: { id: location.id }, data: { serviceWaiter: Boolean(input.serviceOptions?.waiter), serviceBill: Boolean(input.serviceOptions?.bill), themePrimary: color(input.visualTheme?.primary, location.themePrimary), themeAccent: color(input.visualTheme?.accent, location.themeAccent), themePaper: color(input.visualTheme?.paper, location.themePaper), themeName: input.visualTheme?.name?.trim().slice(0, 80) || location.themeName, themeFont: font } });
     return { ok: true };
   }
 
-  async saveDish(userId: string, input: { databaseId?: string; id?: string; name?: string; detail?: string; priceCents?: number; price?: string; badge?: string; category?: string; available?: boolean }, locationId?: string) {
+  async saveDish(userId: string, input: { databaseId?: string; id?: string; name?: string; detail?: string; priceCents?: number; price?: string; badge?: string; categoryId?: string; available?: boolean }, locationId?: string) {
     const location = await this.locationForUser(userId, locationId, 'menu.manage');
     const name = input.name?.trim();
     if (!name) throw new BadRequestException('El plato necesita un nombre.');
     const menu = await this.prisma.menu.findFirstOrThrow({ where: { locationId: location.id, active: true } });
-    const categoryName = input.category?.trim() || 'Sin categoría';
-    const category = await this.prisma.category.upsert({ where: { menuId_name: { menuId: menu.id, name: categoryName } }, update: { archivedAt: null }, create: { menuId: menu.id, name: categoryName, sortOrder: await this.prisma.category.count({ where: { menuId: menu.id } }) } });
-    const priceCents = Number.isFinite(input.priceCents) ? Math.max(0, Math.trunc(input.priceCents!)) : Math.max(0, Number((input.price ?? '0').replace(/\D/g, '')) * 100);
+    const category = input.categoryId
+      ? await this.prisma.category.findFirst({ where: { id: input.categoryId, menuId: menu.id, archivedAt: null } })
+      : await this.prisma.category.upsert({ where: { menuId_name: { menuId: menu.id, name: 'Sin categoría' } }, update: { archivedAt: null }, create: { menuId: menu.id, name: 'Sin categoría', sortOrder: 0 } });
+    if (!category) throw new BadRequestException('Elegí una categoría válida para el plato.');
+    const rawPrice = Number.isFinite(input.priceCents) ? Math.trunc(input.priceCents!) : Number((input.price ?? '').replace(/\D/g, '')) * 100;
+    const priceCents = Number.isFinite(rawPrice) ? rawPrice : 0;
+    if (priceCents <= 0) throw new BadRequestException('El precio debe ser mayor a cero.');
     const data = { name, description: input.detail?.trim() ?? '', priceCents, badge: input.badge?.trim() || null, categoryId: category.id, available: input.available !== false };
     if (input.databaseId) {
       const existing = await this.prisma.dish.findFirst({ where: { id: input.databaseId, menuId: menu.id } });
       if (!existing) throw new NotFoundException('El plato no pertenece a esta sucursal.');
     }
-    const dish = input.databaseId ? await this.prisma.dish.update({ where: { id: input.databaseId }, data }) : await this.prisma.dish.create({ data: { ...data, menuId: menu.id, publicId: `${slugify(name, 'dish')}-${randomBytes(4).toString('hex')}`, sortOrder: await this.prisma.dish.count({ where: { menuId: menu.id } }) } });
-    return { ok: true, dish: { databaseId: dish.id, id: dish.publicId } };
+    const dish = input.databaseId
+      ? await this.prisma.dish.update({ where: { id: input.databaseId }, data, include: { category: true, media: true } })
+      : await this.prisma.dish.create({ data: { ...data, menuId: menu.id, publicId: `${slugify(name, 'dish')}-${randomBytes(4).toString('hex')}`, sortOrder: await this.prisma.dish.count({ where: { menuId: menu.id } }) }, include: { category: true, media: true } });
+    return { ok: true, dish: this.formatDish(dish) };
   }
 
   private async activeMenu(userId: string, locationId: string | undefined) {
@@ -158,11 +184,22 @@ export class CartiaService {
       const category = await this.prisma.category.findFirst({ where: { id: input.id, menuId: menu.id } });
       if (!category) throw new NotFoundException('La categoría no pertenece a la sucursal activa.');
       if (category.name === 'Sin categoría') throw new BadRequestException('No se puede renombrar la categoría Sin categoría.');
-      await this.prisma.category.update({ where: { id: category.id }, data: { name, archivedAt: null } });
+      let saved;
+      try { saved = await this.prisma.category.update({ where: { id: category.id }, data: { name, archivedAt: null } }); }
+      catch (error) {
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') throw new BadRequestException('Ya existe una categoría con ese nombre.');
+        throw error;
+      }
+      return { ok: true, category: { id: saved.id, name: saved.name, sortOrder: saved.sortOrder, archived: Boolean(saved.archivedAt) } };
     } else {
-      await this.prisma.category.create({ data: { menuId: menu.id, name, sortOrder: await this.prisma.category.count({ where: { menuId: menu.id } }) } });
+      let saved;
+      try { saved = await this.prisma.category.create({ data: { menuId: menu.id, name, sortOrder: await this.prisma.category.count({ where: { menuId: menu.id } }) } }); }
+      catch (error) {
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') throw new BadRequestException('Ya existe una categoría con ese nombre.');
+        throw error;
+      }
+      return { ok: true, category: { id: saved.id, name: saved.name, sortOrder: saved.sortOrder, archived: false } };
     }
-    return { ok: true };
   }
 
   async archiveCategory(userId: string, id: string, archive: boolean, locationId?: string) {

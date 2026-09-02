@@ -9,6 +9,7 @@ export class OrganizationsController {
   @Get('organizations') list(@Req() req: Request) { return this.organizations.list(requireUserId(req)); }
   @Post('organizations') create(@Req() req: Request, @Body() body: any) { requireCsrf(req); return this.organizations.create(requireUserId(req), body); }
   @Get('organizations/:organizationId') detail(@Req() req: Request, @Param('organizationId') id: string) { return this.organizations.detail(requireUserId(req), id); }
+  @Patch('organizations/:organizationId') update(@Req() req: Request, @Param('organizationId') id: string, @Body() body: any) { requireCsrf(req); return this.organizations.update(requireUserId(req), id, body); }
   @Post('organizations/:organizationId/locations') addLocation(@Req() req: Request, @Param('organizationId') id: string, @Body() body: any) { requireCsrf(req); return this.organizations.addLocation(requireUserId(req), id, body); }
   @Get('organizations/:organizationId/users') users(@Req() req: Request, @Param('organizationId') id: string) { return this.organizations.users(requireUserId(req), id); }
   @Post('organizations/:organizationId/users') createUser(@Req() req: Request, @Param('organizationId') id: string, @Body() body: any) { requireCsrf(req); return this.organizations.createUser(requireUserId(req), id, body); }

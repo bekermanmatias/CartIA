@@ -26,6 +26,12 @@ export class MediaController {
     return this.media.uploadVideo(requireUserId(request), request.session.activeLocationId, body.dishId ?? '', file!, body);
   }
 
+  @Post('media/remove')
+  remove(@Req() request: Request, @Body() body: { dishId?: string; kind?: 'IMAGE' | 'VIDEO' }) {
+    requireCsrf(request);
+    return this.media.removeDishMedia(requireUserId(request), request.session.activeLocationId, body.dishId ?? '', body.kind);
+  }
+
   @Post('logo/upload')
   @UseInterceptors(logoUpload)
   logo(@Req() request: Request, @UploadedFile() file: Express.Multer.File | undefined) {

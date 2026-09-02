@@ -27,6 +27,14 @@ export class MediaService {
     const extension = allowed.get(file.mimetype);
     if (!extension) throw new BadRequestException(kind === 'VIDEO' ? 'El video debe ser un MP4.' : 'La imagen debe ser JPG, PNG o WebP.');
     if (file.size > maxBytes) throw new BadRequestException(kind === 'VIDEO' ? 'El video supera el máximo de 50 MB.' : 'La imagen supera el máximo de 10 MB.');
+    const bytes = file.buffer;
+    const looksLikeMp4 = bytes.length >= 12 && bytes.subarray(4, 8).toString('ascii') === 'ftyp';
+    const looksLikePng = bytes.length >= 8 && bytes.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+    const looksLikeJpeg = bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+    const looksLikeWebp = bytes.length >= 12 && bytes.subarray(0, 4).toString('ascii') === 'RIFF' && bytes.subarray(8, 12).toString('ascii') === 'WEBP';
+    if ((kind === 'VIDEO' && !looksLikeMp4) || (kind !== 'VIDEO' && !looksLikePng && !looksLikeJpeg && !looksLikeWebp)) {
+      throw new BadRequestException(kind === 'VIDEO' ? 'El archivo no contiene un MP4 válido.' : 'El archivo no contiene una imagen válida.');
+    }
     return extension;
   }
 
@@ -105,6 +113,18 @@ export class MediaService {
     const media = await this.persist({ location, kind: 'LOGO', file });
     await this.prisma.location.update({ where: { id: location.id }, data: { logoPath: media.path } });
     return { ok: true, logo: media.path };
+  }
+
+  async removeDishMedia(userId: string, activeLocationId: string | undefined, dishId: string, kind: 'IMAGE' | 'VIDEO' | undefined) {
+    if (kind !== 'IMAGE' && kind !== 'VIDEO') throw new BadRequestException('El tipo de archivo no es válido.');
+    const location = await this.activeLocation(userId, activeLocationId, 'menu.manage');
+    const dish = await this.prisma.dish.findFirst({ where: { id: dishId, menu: { locationId: location.id } } });
+    if (!dish) throw new NotFoundException('El plato no pertenece a la sucursal activa.');
+    const media = await this.prisma.media.findFirst({ where: { locationId: location.id, dishId, kind } });
+    if (!media) return { ok: true, removed: false };
+    await this.prisma.media.delete({ where: { id: media.id } });
+    await this.storage.remove(media.storageKey);
+    return { ok: true, removed: true };
   }
 
   private videoPayload(media: { path: string; originalName: string; bytes: bigint; mimeType: string; durationSeconds: Prisma.Decimal | null; width: number | null; height: number | null; published: boolean }) {
