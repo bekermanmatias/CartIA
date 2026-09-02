@@ -64,7 +64,7 @@ const navItems = [
   { id: "analitica", label: "Analítica", icon: ChartLineUp },
   { id: "mesas", label: "Mesas", icon: BellSimple },
   { id: "estilo", label: "Estilo", icon: Palette },
-  { id: "contenido", label: "Contenido IA", icon: MagicWand },
+  { id: "contenido", label: "Contenido", icon: MagicWand },
 ];
 
 function useHashScreen() {
@@ -1002,8 +1002,14 @@ function GuestMenu({ videoAssets, menuDishes, serviceOptions, visualTheme, resta
   );
 }
 
-function AnaliticaScreen({ period, onPeriod, analytics }) {
+function AnaliticaScreen({ period, onPeriod, analytics, onNavigate }) {
   const kpis = analytics?.kpis || { scans: 0, views: 0, clicks: 0, adds: 0, orders: 0 };
+  const summary = analytics?.summary || { estimatedRevenueCents: 0, waiterCalls: 0, billRequests: 0, scanToOrderRate: 0 };
+  const daily = analytics?.daily || [];
+  const dishes = analytics?.dishes || [];
+  const suggestions = analytics?.contentSuggestions || [];
+  const money = (cents) => `$${Math.round((cents || 0) / 100).toLocaleString("es-AR")}`;
+  const maxRevenue = Math.max(...daily.map((day) => day.revenueCents), 1);
   return (
     <main className="screen secondary-screen">
       <section className="screen-heading">
@@ -1018,6 +1024,12 @@ function AnaliticaScreen({ period, onPeriod, analytics }) {
         {[["ESCANEOS", kpis.scans, QrCode], ["VISTAS DE PLATO", kpis.views, Eye], ["AGREGADOS", kpis.adds, Plus], ["PEDIDOS", kpis.orders, Receipt]].map(([label, value, Icon]) => <article className="chart-card" key={label}><small>{label}</small><h2>{value}</h2><p>Actividad real del período seleccionado.</p><span className="large-icon"><Icon size={28} /></span></article>)}
         {!kpis.scans && !kpis.views && !kpis.orders && <article className="chart-card span-two"><div className="empty-state"><ChartLineUp size={30} /><strong>Aún no hay analítica</strong><p>Los datos aparecerán cuando los clientes escaneen un QR e interactúen con la carta.</p></div></article>}
       </section>
+      <section className="analytics-detail-grid">
+        <article className="analytics-panel analytics-daily-panel"><div className="section-title-row"><div><p className="eyebrow">EVOLUCIÓN</p><h2>Pedidos y facturación estimada</h2></div><span>{period}</span></div><div className="analytics-bars">{daily.map((day) => <div key={day.date} title={`${day.date}: ${money(day.revenueCents)}`}><span style={{ height: `${Math.max(4, Math.round((day.revenueCents / maxRevenue) * 100))}%` }} /><small>{day.date.slice(5).replace("-", "/")}</small><b>{day.orders}</b></div>)}</div></article>
+        <article className="analytics-panel"><div className="section-title-row"><div><p className="eyebrow">EMBUDO</p><h2>De mirar a pedir</h2></div><span>{summary.scanToOrderRate}% QR a pedido</span></div><div className="analytics-funnel">{[["Escaneos", kpis.scans], ["Vistas", kpis.views], ["Clics", kpis.clicks], ["Agregados", kpis.adds], ["Pedidos", kpis.orders]].map(([label, value]) => <div key={label}><span>{label}</span><strong>{value}</strong></div>)}</div></article>
+      </section>
+      <section className="analytics-panel analytics-dishes-panel"><div className="section-title-row"><div><p className="eyebrow">PLATOS</p><h2>Qué funciona en tu carta</h2></div><span>{dishes.length} platos</span></div>{dishes.length ? <div className="analytics-dish-list">{dishes.slice(0, 8).map((dish) => <article key={dish.id}><div><strong>{dish.name}</strong><small>{dish.views} vistas · {dish.adds} agregados · {dish.averageViewSeconds}s de vista promedio</small></div><div><b>{dish.orderedUnits} unidades</b><span>{money(dish.revenueCents)}</span><small>{dish.orderRate}% conversión</small></div></article>)}</div> : <div className="empty-state"><ForkKnife size={28} /><strong>Todavía no hay rendimiento por plato</strong><p>La tabla se completa cuando se registren vistas o pedidos.</p></div>}</section>
+      {!!suggestions.length && <section className="analytics-panel content-insights"><div className="section-title-row"><div><p className="eyebrow">SUGERENCIAS</p><h2>Próximas mejoras para tu carta</h2></div><button className="text-button" type="button" onClick={() => onNavigate("contenido")}>Ver contenido</button></div><div>{suggestions.slice(0, 4).map((suggestion) => <article key={`${suggestion.type}-${suggestion.dishId}`}><span><MagicWand size={18} /></span><div><strong>{suggestion.title}</strong><p>{suggestion.detail}</p></div><button className="secondary-button" type="button" onClick={() => onNavigate(suggestion.action)}>{suggestion.action === "content" ? "Ver contenido" : "Editar carta"}</button></article>)}</div></section>}
     </main>
   );
 }
@@ -1228,7 +1240,7 @@ function StyleScreen({ onToast, serviceOptions, onServiceOptions, visualTheme, o
   );
 }
 
-function ContentScreen({ onToast, onOpenGuest, publishedVideos, onPublishVideos, menuDishes, restaurant, onUploadVideo, onRemoveVideo }) {
+function ContentScreen({ onToast, onOpenGuest, publishedVideos, onPublishVideos, menuDishes, restaurant, onUploadVideo, onRemoveVideo, analytics, onNavigate }) {
   const fileInputRef = useRef(null);
   const uploadTimerRef = useRef(null);
   const firstVideo = publishedVideos[menuDishes[0]?.id] || null;
@@ -1236,6 +1248,7 @@ function ContentScreen({ onToast, onOpenGuest, publishedVideos, onPublishVideos,
   const [progress, setProgress] = useState(firstVideo ? 100 : 0);
   const [targetDishId, setTargetDishId] = useState(firstVideo?.dishId || menuDishes[0]?.id || "");
   const [error, setError] = useState("");
+  const suggestions = analytics?.contentSuggestions || [];
 
   useEffect(() => () => window.clearInterval(uploadTimerRef.current), []);
 
@@ -1328,7 +1341,7 @@ function ContentScreen({ onToast, onOpenGuest, publishedVideos, onPublishVideos,
   return (
     <main className="screen secondary-screen video-admin-screen">
       <section className="screen-heading video-heading">
-        <div><p className="eyebrow">CONTENIDO IA · PUBLICACIÓN</p><h1>El plato entra por los ojos</h1><p className="heading-copy">Cargá un video, revisalo como cliente y publicalo cuando esté perfecto.</p></div>
+        <div><p className="eyebrow">CONTENIDO · PUBLICACIÓN</p><h1>El plato entra por los ojos</h1><p className="heading-copy">Cargá un video, revisalo como cliente y publicalo cuando esté perfecto.</p></div>
         <button className="secondary-button" type="button" onClick={onOpenGuest}><DeviceMobile size={17} /> Ver carta del cliente</button>
       </section>
 
@@ -1444,6 +1457,7 @@ function ContentScreen({ onToast, onOpenGuest, publishedVideos, onPublishVideos,
           ))}
         </div>
       </section>
+      {!!suggestions.length && <section className="analytics-panel content-insights content-screen-insights"><div className="section-title-row"><div><p className="eyebrow">BASADO EN TU CARTA</p><h2>Qué contenido conviene mejorar</h2></div><button className="text-button" type="button" onClick={() => onNavigate("analitica")}>Ver analítica</button></div><div>{suggestions.slice(0, 5).map((suggestion) => <article key={`${suggestion.type}-${suggestion.dishId}`}><span><MagicWand size={18} /></span><div><strong>{suggestion.title}</strong><p>{suggestion.detail}</p></div><button className="secondary-button" type="button" onClick={() => suggestion.action === "content" ? manageVideo(menuDishes.find((dish) => dish.id === suggestion.dishId)) : onNavigate("carta")}>{suggestion.action === "content" ? "Gestionar video" : "Editar carta"}</button></article>)}</div></section>}
     </main>
   );
 }
@@ -1957,7 +1971,7 @@ export function App() {
   const publicServiceRequest = (type) => hasTableContext ? cartiaApi.serviceRequest({ ...publicParams, type }) : isPublicGuest ? Promise.reject(new Error("Escaneá el QR de tu mesa para usar esta opción.")) : Promise.resolve({ ok: true });
   const publicOrder = (items) => hasTableContext ? cartiaApi.order({ ...publicParams, items }) : isPublicGuest ? Promise.reject(new Error("Escaneá el QR de tu mesa para realizar un pedido.")) : Promise.resolve({ ok: true });
   const publicEvent = (event) => {
-    if (hasTableContext) cartiaApi.event({ ...publicParams, ...event }).catch(() => null);
+    if (isPublicGuest) cartiaApi.event({ ...publicParams, ...event }).catch(() => null);
   };
 
   if (screen === "menu") {
@@ -1985,10 +1999,10 @@ export function App() {
 
   let content;
   if (screen === "carta") content = <CartaScreen menuDishes={menuDishes} categories={categories} restaurant={restaurant} onMenuDishes={setMenuDishes} onCategories={setCategories} onToast={showToast} onOpenGuest={() => navigate("menu")} onSaveDish={saveDish} onRemoveImage={removeImage} onRemoveVideo={removeVideo} onArchiveDish={archiveDish} onReorderDishes={reorderDishes} onSaveCategory={saveCategory} onArchiveCategory={archiveCategory} onReorderCategories={reorderCategories} onRefresh={refreshCatalog} />;
-  else if (screen === "analitica") content = <AnaliticaScreen period={period} onPeriod={setPeriod} analytics={analytics} />;
+  else if (screen === "analitica") content = <AnaliticaScreen period={period} onPeriod={setPeriod} analytics={analytics} onNavigate={navigate} />;
   else if (screen === "mesas") content = <MesasScreen onToast={showToast} tables={tables} requests={requests} orders={orders} onAddTable={addTable} onArchiveTable={archiveTable} onResolveRequest={resolveRequest} onUpdateOrder={updateOrderStatus} />;
   else if (screen === "estilo") content = <StyleScreen onToast={showToast} serviceOptions={serviceOptions} onServiceOptions={setServiceOptions} visualTheme={visualTheme} onVisualTheme={setVisualTheme} onOpenGuest={() => navigate("menu")} restaurant={restaurant} menuDishes={menuDishes} onUploadLogo={uploadLogo} />;
-  else if (screen === "contenido") content = <ContentScreen onToast={showToast} onOpenGuest={() => navigate("menu")} publishedVideos={publishedVideos} onPublishVideos={setPublishedVideos} menuDishes={menuDishes} restaurant={restaurant} onUploadVideo={uploadVideo} onRemoveVideo={removeVideo} />;
+  else if (screen === "contenido") content = <ContentScreen onToast={showToast} onOpenGuest={() => navigate("menu")} publishedVideos={publishedVideos} onPublishVideos={setPublishedVideos} menuDishes={menuDishes} restaurant={restaurant} onUploadVideo={uploadVideo} onRemoveVideo={removeVideo} analytics={analytics} onNavigate={navigate} />;
   else if (screen === "admin") content = currentUser?.role === "superadmin"
     ? <PlatformAdminScreen organizations={organizations} onRefresh={refreshOrganizations} onToast={showToast} onCreateOrganization={(draft) => createRestaurant({ restaurantName: draft.name, locationSlug: draft.locationSlug, adminName: draft.ownerName, email: draft.ownerEmail, password: draft.ownerPassword })} onUpdateOrganization={(id, body) => cartiaApi.updateOrganization(id, body, csrf)} onAddLocation={(id, body) => cartiaApi.addLocation(id, body, csrf)} onUpdateLocation={(id, body) => cartiaApi.updateLocation(id, body, csrf)} onLoadUsers={loadOrganizationUsers} onCreateUser={createOrganizationUser} onUpdateUser={(id, body) => cartiaApi.updateUser(id, body, csrf)} onSelectLocation={selectLocation} />
     : <AdminScreen onToast={showToast} clients={clients} onCreateRestaurant={createRestaurant} onLoadUsers={loadOrganizationUsers} onCreateUser={createOrganizationUser} />;

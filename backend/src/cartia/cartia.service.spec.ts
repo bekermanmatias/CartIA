@@ -1,4 +1,4 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { CartiaService } from './cartia.service';
 
 describe('CartiaService order transitions', () => {
@@ -67,5 +67,25 @@ describe('CartiaService order transitions', () => {
     await expect(service.publicServiceRequest({ restaurant: 'serena-piso-12', type: 'waiter' })).rejects.toBeInstanceOf(NotFoundException);
     await expect(service.publicOrder({ restaurant: 'serena-piso-12', items: [{ dishId: 'dish-a', quantity: 1 }] })).rejects.toBeInstanceOf(NotFoundException);
     await expect(service.publicEvent({ restaurant: 'serena-piso-12', type: 'dish_view', dishId: 'dish-a' })).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('records anonymous menu views without granting operational actions', async () => {
+    (prisma as any).location = { findFirst: jest.fn().mockResolvedValue({ id: 'location-a', slug: 'serena-piso-12' }) };
+    (prisma as any).dish = { findFirst: jest.fn().mockResolvedValue({ id: 'dish-a' }) };
+    (prisma as any).analyticsEvent = { create: jest.fn().mockResolvedValue({ id: 'event-a' }) };
+
+    await expect(service.publicEvent({ restaurant: 'serena-piso-12', type: 'dish_view', dishId: 'dish-a' })).resolves.toEqual({ ok: true });
+    expect((prisma as any).analyticsEvent.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ locationId: 'location-a', tableId: undefined, type: 'DISH_VIEW' }) }));
+    await expect(service.publicEvent({ restaurant: 'serena-piso-12', type: 'add_dish', dishId: 'dish-a' })).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('aggregates analytics by active location and excludes cancelled orders', async () => {
+    (prisma as any).analyticsEvent = { findMany: jest.fn().mockResolvedValue([{ type: 'DISH_VIEW', dishId: 'dish-a', durationMs: 9000, createdAt: new Date() }, { type: 'ADD_DISH', dishId: 'dish-a', durationMs: null, createdAt: new Date() }, { type: 'QR_SCAN', dishId: null, durationMs: null, createdAt: new Date() }]) };
+    (prisma as any).order = { findMany: jest.fn().mockResolvedValue([{ id: 'order-a', totalCents: 15000, createdAt: new Date() }]), findFirst: jest.fn().mockResolvedValue({ id: 'order-a', locationId: 'location-a', status: 'NEW' }), update: jest.fn().mockResolvedValue({ id: 'order-a', status: 'PREPARING' }) };
+    (prisma as any).orderItem = { findMany: jest.fn().mockResolvedValue([{ dishId: 'dish-a', quantity: 2, unitPriceCents: 7500 }]) };
+    (prisma as any).dish = { findMany: jest.fn().mockResolvedValue([{ id: 'dish-a', publicId: 'pasta', name: 'Pasta', available: true, media: [] }]) };
+
+    await expect(service.analytics('user-a', 7, 'location-a')).resolves.toMatchObject({ summary: { orderCount: 1, estimatedRevenueCents: 15000 }, dishes: [expect.objectContaining({ id: 'pasta', views: 1, adds: 1, orderedUnits: 2, revenueCents: 15000 })] });
+    expect((prisma as any).order.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ locationId: 'location-a', status: { not: 'CANCELLED' } }) }));
   });
 });

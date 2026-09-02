@@ -256,20 +256,62 @@ export class CartiaService {
   }
 
   async publicEvent(input: { restaurant?: string; tableToken?: string; visitorSession?: string; type?: string; dishId?: string; durationMs?: number; metadata?: Prisma.InputJsonValue }) {
-    const ctx = await this.context(input.restaurant ?? '', input.tableToken ?? '');
+    const ctx = input.tableToken ? await this.context(input.restaurant ?? '', input.tableToken) : null;
     const eventType = { dish_view: 'DISH_VIEW', dish_click: 'DISH_CLICK', add_dish: 'ADD_DISH' }[input.type ?? ''] as AnalyticsEventType | undefined;
     if (!eventType) throw new BadRequestException('Evento inválido.');
-    const dish = input.dishId ? await this.prisma.dish.findFirst({ where: { publicId: input.dishId, menu: { locationId: ctx.location.id } } }) : null;
-    await this.prisma.analyticsEvent.create({ data: { locationId: ctx.location.id, tableId: ctx.table.id, dishId: dish?.id, visitorSession: input.visitorSession?.slice(0, 64), type: eventType, durationMs: input.durationMs ? Math.max(0, Math.min(input.durationMs, 3_600_000)) : null, metadata: input.metadata } });
+    if (!ctx && eventType === 'ADD_DISH') throw new ForbiddenException('Escaneá el QR de tu mesa para agregar platos.');
+    const location = ctx?.location ?? await this.prisma.location.findFirst({ where: { slug: input.restaurant ?? '', status: 'ACTIVE' } });
+    if (!location) throw new NotFoundException('Restaurante no encontrado.');
+    const dish = input.dishId ? await this.prisma.dish.findFirst({ where: { publicId: input.dishId, menu: { locationId: location.id } } }) : null;
+    await this.prisma.analyticsEvent.create({ data: { locationId: location.id, tableId: ctx?.table.id, dishId: dish?.id, visitorSession: input.visitorSession?.slice(0, 64), type: eventType, durationMs: input.durationMs ? Math.max(0, Math.min(input.durationMs, 3_600_000)) : null, metadata: input.metadata } });
     return { ok: true };
   }
 
   async analytics(userId: string, days = 7, locationId?: string) {
     const location = await this.locationForUser(userId, locationId, 'analytics.read');
-    const since = new Date(Date.now() - ([1, 7, 30].includes(days) ? days : 7) * 86_400_000);
-    const events = await this.prisma.analyticsEvent.groupBy({ by: ['type'], where: { locationId: location.id, createdAt: { gte: since } }, _count: true });
-    const count = (type: AnalyticsEventType) => events.find((event) => event.type === type)?._count ?? 0;
-    return { ok: true, days, kpis: { scans: count('QR_SCAN'), views: count('DISH_VIEW'), clicks: count('DISH_CLICK'), adds: count('ADD_DISH'), orders: count('ORDER_SENT') }, dishes: [] };
+    const selectedDays = [1, 7, 30].includes(days) ? days : 7;
+    const since = new Date(Date.now() - selectedDays * 86_400_000);
+    const orderWhere = { locationId: location.id, createdAt: { gte: since }, status: { not: 'CANCELLED' as OrderStatus } };
+    const [events, orders, orderItems, dishes] = await Promise.all([
+      this.prisma.analyticsEvent.findMany({ where: { locationId: location.id, createdAt: { gte: since } }, select: { type: true, dishId: true, durationMs: true, createdAt: true } }),
+      this.prisma.order.findMany({ where: orderWhere, select: { id: true, totalCents: true, createdAt: true } }),
+      this.prisma.orderItem.findMany({ where: { order: orderWhere }, select: { dishId: true, quantity: true, unitPriceCents: true } }),
+      this.prisma.dish.findMany({ where: { menu: { locationId: location.id }, archivedAt: null }, select: { id: true, publicId: true, name: true, available: true, media: { where: { kind: 'VIDEO', published: true }, select: { id: true } } } }),
+    ]);
+    const count = (type: AnalyticsEventType) => events.filter((event) => event.type === type).length;
+    const perDish = new Map(dishes.map((dish) => [dish.id, { id: dish.publicId, name: dish.name, available: dish.available, hasVideo: dish.media.length > 0, views: 0, clicks: 0, adds: 0, orderedUnits: 0, revenueCents: 0, viewDurationMs: 0, timedViews: 0 }]));
+    for (const event of events) {
+      const dish = event.dishId ? perDish.get(event.dishId) : undefined;
+      if (!dish) continue;
+      if (event.type === 'DISH_VIEW') { dish.views += 1; if (event.durationMs) { dish.viewDurationMs += event.durationMs; dish.timedViews += 1; } }
+      if (event.type === 'DISH_CLICK') dish.clicks += 1;
+      if (event.type === 'ADD_DISH') dish.adds += 1;
+    }
+    for (const item of orderItems) {
+      const dish = perDish.get(item.dishId);
+      if (!dish) continue;
+      dish.orderedUnits += item.quantity;
+      dish.revenueCents += item.quantity * item.unitPriceCents;
+    }
+    const dishMetrics = [...perDish.values()].map((dish) => ({ id: dish.id, name: dish.name, available: dish.available, hasVideo: dish.hasVideo, views: dish.views, clicks: dish.clicks, adds: dish.adds, orderedUnits: dish.orderedUnits, revenueCents: dish.revenueCents, averageViewSeconds: dish.timedViews ? Math.round((dish.viewDurationMs / dish.timedViews) / 1000) : 0, addRate: dish.views ? Math.round((dish.adds / dish.views) * 100) : 0, orderRate: dish.views ? Math.round((dish.orderedUnits / dish.views) * 100) : 0 })).sort((a, b) => b.revenueCents - a.revenueCents || b.orderedUnits - a.orderedUnits || b.views - a.views);
+    const daily = Array.from({ length: selectedDays }, (_, index) => {
+      const date = new Date(); date.setHours(0, 0, 0, 0); date.setDate(date.getDate() - (selectedDays - index - 1));
+      const next = new Date(date); next.setDate(next.getDate() + 1);
+      const dayOrders = orders.filter((order) => order.createdAt >= date && order.createdAt < next);
+      const dayEvents = events.filter((event) => event.createdAt >= date && event.createdAt < next);
+      return { date: date.toISOString().slice(0, 10), orders: dayOrders.length, revenueCents: dayOrders.reduce((sum, order) => sum + order.totalCents, 0), scans: dayEvents.filter((event) => event.type === 'QR_SCAN').length, views: dayEvents.filter((event) => event.type === 'DISH_VIEW').length };
+    });
+    const contentSuggestions = dishMetrics.flatMap((dish) => {
+      const suggestions: { dishId: string; dishName: string; type: string; title: string; detail: string; action: 'content' | 'carta' }[] = [];
+      if (!dish.hasVideo) suggestions.push({ dishId: dish.id, dishName: dish.name, type: 'missing_video', title: `Sumá un video a ${dish.name}`, detail: 'Los platos con una pieza visual tienen más oportunidades de ser descubiertos.', action: 'content' });
+      if (dish.views >= 10 && dish.adds === 0 && dish.orderedUnits === 0) suggestions.push({ dishId: dish.id, dishName: dish.name, type: 'low_conversion', title: `Revisá la presentación de ${dish.name}`, detail: `${dish.views} vistas sin agregados: probá mejorar foto, video, descripción o precio.`, action: 'carta' });
+      if (dish.adds >= 5 && dish.orderedUnits === 0) suggestions.push({ dishId: dish.id, dishName: dish.name, type: 'checkout_drop', title: `Revisá la propuesta de ${dish.name}`, detail: `${dish.adds} agregados sin pedidos: verificá disponibilidad y precio.`, action: 'carta' });
+      return suggestions;
+    });
+    const bestSeller = dishMetrics.find((dish) => dish.orderedUnits > 0);
+    if (bestSeller) contentSuggestions.unshift({ dishId: bestSeller.id, dishName: bestSeller.name, type: 'best_seller', title: `Destacá ${bestSeller.name}`, detail: `Es tu plato con mejor resultado: ${bestSeller.orderedUnits} unidades y $${Math.round(bestSeller.revenueCents / 100).toLocaleString('es-AR')} de facturación estimada.`, action: 'carta' });
+    const estimatedRevenueCents = orders.reduce((sum, order) => sum + order.totalCents, 0);
+    return { ok: true, days: selectedDays, kpis: { scans: count('QR_SCAN'), views: count('DISH_VIEW'), clicks: count('DISH_CLICK'), adds: count('ADD_DISH'), orders: orders.length, waiterCalls: count('WAITER_CALL'), billRequests: count('BILL_REQUEST') }, summary: { orderCount: orders.length, estimatedRevenueCents, waiterCalls: count('WAITER_CALL'), billRequests: count('BILL_REQUEST'), scanToOrderRate: count('QR_SCAN') ? Math.round((orders.length / count('QR_SCAN')) * 100) : 0 }, daily, dishes: dishMetrics, contentSuggestions };
   }
 
   async streamFor(userId: string, locationId?: string) {
