@@ -16,14 +16,14 @@ El wildcard hace que no haya que crear un registro DNS por restaurante. La propa
 
 ## Certificado TLS wildcard
 
-El VPS debe tener un certificado que incluya `cartia.ar` y `*.cartia.ar`. Guardar los archivos fuera del repositorio, por ejemplo:
+El Nginx principal del VPS debe tener un certificado que incluya `cartia.ar` y `*.cartia.ar`. El certificado se termina en ese Nginx, no dentro del contenedor de CartIA.
 
 ```env
-TLS_CERT_PATH=/opt/cartia/tls/fullchain.pem
-TLS_KEY_PATH=/opt/cartia/tls/privkey.pem
+TLS_CERT_PATH=/var/www/cartia-secrets/tls/fullchain.pem
+TLS_KEY_PATH=/var/www/cartia-secrets/tls/privkey.pem
 ```
 
-El compose de producción los monta en Nginx como solo lectura. La renovación del certificado debe actualizar esos mismos archivos y recargar el servicio `web`.
+La renovación del certificado debe actualizar esos mismos archivos y recargar el Nginx principal.
 
 ## Variables de producción
 
@@ -36,7 +36,7 @@ VITE_PLATFORM_ORIGIN=https://app.cartia.ar
 APP_URL=https://app.cartia.ar
 ```
 
-`cartia.ar` muestra la landing; `app.cartia.ar` sirve el panel de acceso; cualquier otro subdominio de primer nivel sirve la carta pública. Nginx preserva el encabezado `Host` hacia NestJS, que identifica la sucursal sin enviar su slug en los QR nuevos.
+`cartia.ar` muestra la landing; `app.cartia.ar` sirve el panel de acceso; cualquier otro subdominio de primer nivel sirve la carta pública. El Nginx principal preserva el encabezado `Host` al proxyar hacia `http://127.0.0.1:18080`, y NestJS identifica la sucursal sin enviar su slug en los QR nuevos.
 
 ## Desarrollo y QR existentes
 

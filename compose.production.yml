@@ -55,12 +55,9 @@ services:
         VITE_ROOT_DOMAIN: ${PUBLIC_BASE_DOMAIN:-cartia.ar}
         VITE_PLATFORM_ORIGIN: ${VITE_PLATFORM_ORIGIN:-https://app.cartia.ar}
     ports:
-      - "${HTTP_PORT:-80}:80"
-      - "${HTTPS_PORT:-443}:443"
+      - "127.0.0.1:${HTTP_PORT:-18080}:80"
     volumes:
       - media_data:/var/www/uploads:ro
-      - ${TLS_CERT_PATH:-./deploy/tls/fullchain.pem}:/etc/nginx/tls/fullchain.pem:ro
-      - ${TLS_KEY_PATH:-./deploy/tls/privkey.pem}:/etc/nginx/tls/privkey.pem:ro
     depends_on:
       api:
         condition: service_healthy

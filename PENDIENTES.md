@@ -155,3 +155,11 @@ CartIA estará lista cuando React funcione desde `frontend/`, NestJS/Prisma desd
 - Estado: `terminado`.
 - Cambios: header, avatar, selector de sucursal, contador y franja de sala se alimentan de usuario, sucursal y `/operations`; la franja se oculta sin actividad y vuelve a mostrarse ante una operación nueva. Se eliminaron las referencias visibles de restaurantes demo en carta pública y previsualizaciones.
 - Evidencia: build del frontend y 13 tests backend correctos; no permanecen en React los textos `La Oliva`, `Cocina mediterránea`, `Buenos Aires`, mesas ficticias ni el contador fijo.
+
+## Deploy en VPS multi-app — 2026-09-01
+
+- Estado: `en progreso`.
+- Cambio: CartIA deja de publicar `80/443` directamente. El web productivo se expone únicamente en `127.0.0.1:18080`; el Nginx principal del VPS termina HTTPS y conserva el encabezado `Host` para resolver subdominios.
+- Release: el script prepara PostgreSQL antes del backup y tolera el primer despliegue cuando todavía no existe un dump previo.
+- Evidencia: `docker compose -f compose.production.yml config --quiet`, typecheck backend y build frontend correctos.
+- Próxima acción: actualizar el clone del VPS, crear el proxy Nginx de `cartia.ar` y validar el servicio por `127.0.0.1:18080` antes de publicar DNS/TLS.
