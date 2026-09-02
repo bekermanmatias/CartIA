@@ -54,6 +54,7 @@ services:
       args:
         VITE_ROOT_DOMAIN: ${PUBLIC_BASE_DOMAIN:-cartia.ar}
         VITE_PLATFORM_ORIGIN: ${VITE_PLATFORM_ORIGIN:-https://app.cartia.ar}
+        VITE_SALES_WHATSAPP_URL: ${VITE_SALES_WHATSAPP_URL:-}
     ports:
       - "127.0.0.1:${HTTP_PORT:-18080}:80"
     volumes:

@@ -33,10 +33,13 @@ En el `.env` local del VPS (no versionado):
 PUBLIC_BASE_DOMAIN=cartia.ar
 PUBLIC_PROTOCOL=https
 VITE_PLATFORM_ORIGIN=https://app.cartia.ar
+VITE_SALES_WHATSAPP_URL=https://wa.me/5491100000000
 APP_URL=https://app.cartia.ar
 ```
 
 `cartia.ar` muestra la landing; `app.cartia.ar` sirve el panel de acceso; cualquier otro subdominio de primer nivel sirve la carta pública. El Nginx principal preserva el encabezado `Host` al proxyar hacia `http://127.0.0.1:18080`, y NestJS identifica la sucursal sin enviar su slug en los QR nuevos.
+
+`VITE_SALES_WHATSAPP_URL` es opcional. Al configurarla con una URL de WhatsApp, los CTAs de `cartia.ar` abren una consulta comercial precompletada. Si se omite, la landing no publica un enlace de contacto ficticio.
 
 ## Desarrollo y QR existentes
 

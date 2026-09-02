@@ -6,11 +6,21 @@ services:
     environment:
       NODE_ENV: development
       CHOKIDAR_USEPOLLING: "true"
+    env_file:
+      - ./backend/.env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     command: sh -c "npx prisma generate && npx prisma migrate deploy && npm run start:dev"
     volumes:
       - ./backend:/app
       - backend_node_modules:/app/node_modules
       - media_data:/app/uploads
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
 
   frontend:
     build:
@@ -31,3 +41,4 @@ services:
 volumes:
   backend_node_modules:
   frontend_node_modules:
+  media_data:

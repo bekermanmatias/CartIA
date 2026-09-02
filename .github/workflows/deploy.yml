@@ -21,6 +21,7 @@ jobs:
           build-args: |
             VITE_ROOT_DOMAIN=${{ vars.PUBLIC_BASE_DOMAIN || 'cartia.ar' }}
             VITE_PLATFORM_ORIGIN=https://app.${{ vars.PUBLIC_BASE_DOMAIN || 'cartia.ar' }}
+            VITE_SALES_WHATSAPP_URL=${{ vars.SALES_WHATSAPP_URL }}
       - uses: appleboy/ssh-action@v1.2.2
         env:
           API_IMAGE: ghcr.io/${{ github.repository_owner }}/cartia-api:${{ github.sha }}
@@ -30,4 +31,4 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
           envs: API_IMAGE,WEB_IMAGE
-          script: export VPS_DEPLOY_PATH='${{ secrets.VPS_DEPLOY_PATH }}'; sh "$VPS_DEPLOY_PATH/scripts/vps-release.sh"
+          script: export VPS_DEPLOY_PATH='${{ secrets.VPS_DEPLOY_PATH }}'; git -C "$VPS_DEPLOY_PATH" pull --ff-only origin main; sh "$VPS_DEPLOY_PATH/scripts/vps-release.sh"
