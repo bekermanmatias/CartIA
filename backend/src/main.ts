@@ -10,6 +10,9 @@ import { PrismaService } from './prisma/prisma.service';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { bufferLogs: true });
   app.useLogger(app.get(Logger));
+  // Production TLS terminates at Nginx. Express must trust X-Forwarded-Proto
+  // so secure session cookies are emitted and persist after login.
+  if (process.env.NODE_ENV === 'production') app.getHttpAdapter().getInstance().set('trust proxy', 1);
   app.setGlobalPrefix('');
   app.use(json({ limit: '1mb' }));
   app.use(cookieParser());
