@@ -302,6 +302,7 @@ export class CartiaService {
       if (event.type === 'ADD_DISH') dish.adds += 1;
     }
     for (const item of orderItems) {
+      if (!item.dishId) continue;
       const dish = perDish.get(item.dishId);
       if (!dish) continue;
       dish.orderedUnits += item.quantity;
