@@ -255,12 +255,12 @@ model Order {
 model OrderItem {
   id             String @id @default(cuid())
   orderId        String
-  dishId         String
+  dishId         String?
   dishName       String
   unitPriceCents Int
   quantity       Int
   order          Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  dish           Dish   @relation(fields: [dishId], references: [id], onDelete: Restrict)
+  dish           Dish?  @relation(fields: [dishId], references: [id], onDelete: SetNull)
   @@index([orderId])
 }
 

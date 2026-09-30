@@ -76,6 +76,7 @@ export const cartiaApi = {
   }),
   saveDish: (dish, csrf) => request("dishes/save", { method: "POST", csrf, body: dish }),
   archiveDish: (id, archive, csrf) => request("dishes/archive", { method: "POST", csrf, body: { id, archive } }),
+  deleteDish: (id, csrf) => request("dishes/delete", { method: "POST", csrf, body: { id } }),
   reorderDishes: (ids, csrf) => request("dishes/reorder", { method: "POST", csrf, body: { ids } }),
   saveCategory: (category, csrf) => request("categories/save", { method: "POST", csrf, body: category }),
   archiveCategory: (id, archive, csrf) => request("categories/archive", { method: "POST", csrf, body: { id, archive } }),

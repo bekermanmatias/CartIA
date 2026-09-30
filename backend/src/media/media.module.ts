@@ -9,5 +9,6 @@ import { StorageService } from './storage.service';
   imports: [PrismaModule, AccessModule],
   controllers: [MediaController],
   providers: [StorageService, MediaService],
+  exports: [StorageService],
 })
 export class MediaModule {}

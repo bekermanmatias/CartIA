@@ -1538,6 +1538,99 @@ h1 {
   cursor: pointer;
 }
 
+.catalog-delete {
+  color: #8f2636;
+  border-color: #e7c8ce;
+  background: #fff9f9;
+}
+
+.delete-dish-backdrop {
+  position: fixed;
+  z-index: 120;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(25, 29, 25, 0.56);
+  backdrop-filter: blur(3px);
+}
+
+.delete-dish-modal {
+  width: min(100%, 480px);
+  padding: 31px;
+  border: 1px solid #e4d7d3;
+  border-radius: 18px;
+  color: var(--ink);
+  background: #fbf8f2;
+  box-shadow: 0 22px 70px rgba(22, 29, 24, 0.28);
+}
+
+.delete-dish-modal h2 {
+  margin: 7px 0 13px;
+  font: 600 34px/1 var(--serif);
+}
+
+.delete-dish-modal > p:not(.eyebrow) {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.delete-dish-modal label {
+  display: grid;
+  gap: 8px;
+  margin-top: 22px;
+  color: #5d5b55;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.delete-dish-modal label strong { color: #8f2636; }
+
+.delete-dish-modal input {
+  width: 100%;
+  min-height: 43px;
+  padding: 11px 12px;
+  border: 1px solid #dcd5ca;
+  border-radius: 10px;
+  color: var(--ink);
+  background: #fff;
+  font: 500 12px/1.4 var(--sans);
+  outline: none;
+}
+
+.delete-dish-modal input:focus {
+  border-color: #8f2636;
+  box-shadow: 0 0 0 3px rgba(143, 38, 54, 0.12);
+}
+
+.delete-dish-modal footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 24px;
+}
+
+.delete-dish-confirm {
+  min-height: 38px;
+  padding: 0 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid #7d1f2e;
+  border-radius: 9px;
+  color: #fff;
+  background: #8f2636;
+  font-size: 9px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.delete-dish-confirm:disabled { cursor: not-allowed; opacity: 0.55; }
+
 .dish-editor-backdrop {
   position: fixed;
   z-index: 110;
@@ -4787,6 +4880,16 @@ h1 {
   .dish-editor {
     padding: 22px 17px;
   }
+
+  .delete-dish-backdrop { padding: 16px; }
+
+  .delete-dish-modal { padding: 24px 18px; }
+
+  .delete-dish-modal h2 { font-size: 29px; }
+
+  .delete-dish-modal footer { flex-wrap: wrap; }
+
+  .delete-dish-modal footer button { flex: 1 1 150px; }
 
   .dish-editor > footer {
     bottom: -22px;

@@ -46,11 +46,12 @@ export class StorageService {
     }
   }
 
-  async remove(key?: string | null): Promise<void> {
+  async remove(key?: string | null, options: { required?: boolean } = {}): Promise<void> {
     if (!key) return;
     try {
       await this.client.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }));
-    } catch {
+    } catch (error) {
+      if (options.required) throw new InternalServerErrorException('No se pudo eliminar el archivo asociado al plato.', { cause: error });
       // A failed cleanup must not hide a successful replacement already saved in the database.
     }
   }

@@ -5,13 +5,14 @@ import { Subject } from 'rxjs';
 import { publicLocationUrl, slugify } from '../common/security';
 import { PrismaService } from '../prisma/prisma.service';
 import { AccessService, Permission } from '../access/access.service';
+import { StorageService } from '../media/storage.service';
 
 type PublicContext = { location: { id: string; slug: string; name: string; tagline: string | null; logoPath: string | null; themePrimary: string; themeAccent: string; themePaper: string; themeName: string; themeFont: string; serviceWaiter: boolean; serviceBill: boolean }; table: { id: string; label: string } };
 
 @Injectable()
 export class CartiaService {
   readonly events = new Subject<{ type: string; locationId: string; data: Record<string, unknown> }>();
-  constructor(private readonly prisma: PrismaService, private readonly access: AccessService) {}
+  constructor(private readonly prisma: PrismaService, private readonly access: AccessService, private readonly storage: StorageService) {}
 
   private imagePath(dish: { media: { path: string; kind: string }[] }) {
     return dish.media.find((item) => item.kind === 'IMAGE')?.path ?? null;
@@ -165,6 +166,19 @@ export class CartiaService {
     const dish = await this.prisma.dish.findFirst({ where: { id, menuId: menu.id } });
     if (!dish) throw new NotFoundException('El plato no pertenece a la sucursal activa.');
     await this.prisma.dish.update({ where: { id }, data: { archivedAt: archive ? new Date() : null, available: archive ? false : dish.available } });
+    return { ok: true };
+  }
+
+  async deleteDish(userId: string, id: string, locationId?: string) {
+    const { menu } = await this.activeMenu(userId, locationId);
+    const dish = await this.prisma.dish.findFirst({
+      where: { id, menuId: menu.id },
+      include: { media: { select: { storageKey: true } } },
+    });
+    if (!dish) throw new NotFoundException('El plato no pertenece a la sucursal activa.');
+
+    for (const media of dish.media) await this.storage.remove(media.storageKey, { required: true });
+    await this.prisma.dish.delete({ where: { id: dish.id } });
     return { ok: true };
   }
 

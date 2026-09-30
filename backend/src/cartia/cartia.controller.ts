@@ -1,6 +1,6 @@
 import { Body, Controller, Get, MessageEvent, Param, Post, Query, Req, Sse } from '@nestjs/common';
 import { Request } from 'express';
-import { filter, map, Observable } from 'rxjs';
+import { filter, interval, map, merge, Observable, startWith } from 'rxjs';
 import { locationSlugFromHost, requireCsrf, requireUserId } from '../common/security';
 import { CartiaService } from './cartia.service';
 
@@ -22,6 +22,7 @@ export class CartiaController {
   @Post('settings') settings(@Req() request: Request, @Body() body: { serviceOptions?: { waiter?: boolean; bill?: boolean }; visualTheme?: { primary?: string; accent?: string; paper?: string; name?: string; font?: string } }) { requireCsrf(request); return this.cartia.saveSettings(requireUserId(request), body, request.session.activeLocationId); }
   @Post('dishes/save') dish(@Req() request: Request, @Body() body: { databaseId?: string; id?: string; name?: string; detail?: string; priceCents?: number; price?: string; badge?: string; categoryId?: string; available?: boolean }) { requireCsrf(request); return this.cartia.saveDish(requireUserId(request), body, request.session.activeLocationId); }
   @Post('dishes/archive') archiveDish(@Req() request: Request, @Body() body: { id?: string; archive?: boolean }) { requireCsrf(request); return this.cartia.archiveDish(requireUserId(request), body.id ?? '', body.archive !== false, request.session.activeLocationId); }
+  @Post('dishes/delete') deleteDish(@Req() request: Request, @Body() body: { id?: string }) { requireCsrf(request); return this.cartia.deleteDish(requireUserId(request), body.id ?? '', request.session.activeLocationId); }
   @Post('dishes/reorder') reorderDishes(@Req() request: Request, @Body() body: { ids?: string[] }) { requireCsrf(request); return this.cartia.reorderDishes(requireUserId(request), body.ids ?? [], request.session.activeLocationId); }
   @Post('categories/save') saveCategory(@Req() request: Request, @Body() body: { id?: string; name?: string }) { requireCsrf(request); return this.cartia.saveCategory(requireUserId(request), body, request.session.activeLocationId); }
   @Post('categories/archive') archiveCategory(@Req() request: Request, @Body() body: { id?: string; archive?: boolean }) { requireCsrf(request); return this.cartia.archiveCategory(requireUserId(request), body.id ?? '', body.archive !== false, request.session.activeLocationId); }
@@ -36,9 +37,15 @@ export class CartiaController {
   @Sse('admin/events')
   async events(@Req() request: Request): Promise<Observable<MessageEvent>> {
     const { locationId, stream } = await this.cartia.streamFor(requireUserId(request), request.session.activeLocationId);
-    return stream.pipe(
-      filter((event) => event.locationId === locationId),
-      map((event) => ({ type: event.type, data: event.data } as MessageEvent)),
+    return merge(
+      stream.pipe(
+        filter((event) => event.locationId === locationId),
+        map((event) => ({ type: event.type, data: event.data } as MessageEvent)),
+      ),
+      interval(25_000).pipe(
+        startWith(0),
+        map(() => ({ type: 'ping', data: {} } as MessageEvent)),
+      ),
     );
   }
 }

@@ -4,7 +4,8 @@ import { CartiaService } from './cartia.service';
 describe('CartiaService order transitions', () => {
   const prisma = { order: { findFirst: jest.fn(), update: jest.fn() } };
   const access = { actor: jest.fn(), requireLocation: jest.fn() };
-  const service = new CartiaService(prisma as any, access as any);
+  const storage = { remove: jest.fn() };
+  const service = new CartiaService(prisma as any, access as any, storage as any);
 
   beforeEach(() => {
     jest.resetAllMocks();
@@ -38,6 +39,20 @@ describe('CartiaService order transitions', () => {
     (prisma as any).category = { findFirst: jest.fn().mockResolvedValue({ id: 'category-a', name: 'Principales' }) };
     (prisma as any).dish = { count: jest.fn().mockResolvedValue(0), create: jest.fn().mockResolvedValue({ id: 'dish-a', publicId: 'plato-a', name: 'Plato A', description: '', priceCents: 12500, badge: null, available: true, sortOrder: 0, archivedAt: null, category: { id: 'category-a', name: 'Principales' }, media: [] }) };
     await expect(service.saveDish('user-a', { name: 'Plato A', price: '$125', categoryId: 'category-a' }, 'location-a')).resolves.toMatchObject({ ok: true, dish: { databaseId: 'dish-a', categoryId: 'category-a', priceCents: 12500 } });
+  });
+
+  it('permanently deletes only a dish from the active menu and its stored files', async () => {
+    (prisma as any).menu = { findFirstOrThrow: jest.fn().mockResolvedValue({ id: 'menu-a' }) };
+    (prisma as any).dish = {
+      findFirst: jest.fn().mockResolvedValue({ id: 'dish-a', media: [{ storageKey: 'menus/a/photo.webp' }, { storageKey: 'menus/a/video.mp4' }] }),
+      delete: jest.fn().mockResolvedValue({ id: 'dish-a' }),
+    };
+
+    await expect(service.deleteDish('user-a', 'dish-a', 'location-a')).resolves.toEqual({ ok: true });
+    expect((prisma as any).dish.findFirst).toHaveBeenCalledWith({ where: { id: 'dish-a', menuId: 'menu-a' }, include: { media: { select: { storageKey: true } } } });
+    expect(storage.remove).toHaveBeenNthCalledWith(1, 'menus/a/photo.webp', { required: true });
+    expect(storage.remove).toHaveBeenNthCalledWith(2, 'menus/a/video.mp4', { required: true });
+    expect((prisma as any).dish.delete).toHaveBeenCalledWith({ where: { id: 'dish-a' } });
   });
 
   it('returns an active public menu without a table token', async () => {

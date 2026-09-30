@@ -299,12 +299,13 @@ function PeriodSelect({ value, onChange }) {
   );
 }
 
-function CartaScreen({ menuDishes, categories, restaurant, onMenuDishes, onCategories, onToast, onOpenGuest, onSaveDish, onRemoveImage, onRemoveVideo, onArchiveDish, onReorderDishes, onSaveCategory, onArchiveCategory, onReorderCategories, onRefresh }) {
+function CartaScreen({ menuDishes, categories, restaurant, onMenuDishes, onCategories, onToast, onOpenGuest, onSaveDish, onRemoveImage, onRemoveVideo, onArchiveDish, onDeleteDish, onReorderDishes, onSaveCategory, onArchiveCategory, onReorderCategories, onRefresh }) {
   const [category, setCategory] = useState("Recomendados");
   const [selected, setSelected] = useState(0);
   const [view, setView] = useState("catalog");
   const [editingDish, setEditingDish] = useState(null);
   const [categoryModal, setCategoryModal] = useState(null);
+  const [deleteDish, setDeleteDish] = useState(null);
   const [categoryForDish, setCategoryForDish] = useState(false);
   const activeDishes = menuDishes.filter((dish) => !dish.archived);
   const archivedDishes = menuDishes.filter((dish) => dish.archived);
@@ -377,6 +378,17 @@ function CartaScreen({ menuDishes, categories, restaurant, onMenuDishes, onCateg
   const archiveDish = async (dish, archive) => {
     if (archive && !window.confirm(`¿Archivar ${dish.name}? Se conservará el historial y podrá restaurarse.`)) return;
     try { await onArchiveDish(dish.databaseId, archive); onMenuDishes((current) => current.map((item) => item.databaseId === dish.databaseId ? { ...item, archived: archive, available: archive ? false : item.available } : item)); } catch (error) { onToast(error.message || "No se pudo actualizar el plato"); }
+  };
+  const permanentlyDeleteDish = async (dish) => {
+    try {
+      await onDeleteDish(dish.databaseId);
+      onMenuDishes((current) => current.filter((item) => item.databaseId !== dish.databaseId));
+      setDeleteDish(null);
+      onToast(`${dish.name} y sus archivos fueron eliminados definitivamente`);
+    } catch (error) {
+      onToast(error.message || "No se pudo eliminar el plato");
+      throw error;
+    }
   };
   const moveDish = async (dish, direction) => {
     const ordered = [...activeDishes]; const index = ordered.findIndex((item) => item.databaseId === dish.databaseId); const target = index + direction;
@@ -480,13 +492,14 @@ function CartaScreen({ menuDishes, categories, restaurant, onMenuDishes, onCateg
                 <button className="catalog-edit" type="button" disabled={index === 0} onClick={() => moveDish(dish, -1)}>↑</button>
                 <button className="catalog-edit" type="button" disabled={index === activeDishes.length - 1} onClick={() => moveDish(dish, 1)}>↓</button>
                 <button className="catalog-edit" type="button" onClick={() => archiveDish(dish, true)}>Archivar</button>
+                <button className="catalog-edit catalog-delete" type="button" onClick={() => setDeleteDish(dish)}><Trash size={15} /> Eliminar</button>
               </article>
             ))}
             {!activeDishes.length && <div className="empty-state catalog-empty"><ForkKnife size={30} /><strong>Tu carta todavía está vacía</strong><p>Agregá tu primer plato con nombre, precio y una imagen opcional.</p><button className="primary-button" type="button" onClick={openNewDish}><Plus size={17} /> Crear primer plato</button></div>}
             <div className="catalog-list-heading"><div><p className="eyebrow">CATEGORÍAS</p><h2>Orden y visibilidad</h2></div><button className="secondary-button" type="button" onClick={() => setCategoryModal({ mode: "save", category: null })}>Nueva categoría</button></div>
             {activeCategories.map((item, index) => <article className="catalog-dish" key={item.id}><div className="catalog-dish-main"><h3>{item.name}</h3><p>Orden {index + 1}</p></div><button className="catalog-edit" type="button" onClick={() => setCategoryModal({ mode: "save", category: item })}>Renombrar</button><button className="catalog-edit" type="button" disabled={index === 0} onClick={() => moveCategory(item, -1)}>↑</button><button className="catalog-edit" type="button" disabled={index === activeCategories.length - 1} onClick={() => moveCategory(item, 1)}>↓</button>{item.name !== "Sin categoría" && <button className="catalog-edit" type="button" onClick={() => setCategoryModal({ mode: "archive", category: item })}>Archivar</button>}</article>)}
             {(archivedDishes.length || categories.some((item) => item.archived)) && <div className="catalog-list-heading"><div><p className="eyebrow">ARCHIVADOS</p><h2>Restaurar contenido</h2></div></div>}
-            {archivedDishes.map((dish) => <article className="catalog-dish is-hidden" key={dish.databaseId}><div className="catalog-dish-main"><h3>{dish.name}</h3><p>Plato archivado</p></div><button className="catalog-edit" type="button" onClick={() => archiveDish(dish, false)}>Restaurar</button></article>)}
+            {archivedDishes.map((dish) => <article className="catalog-dish is-hidden" key={dish.databaseId}><div className="catalog-dish-main"><h3>{dish.name}</h3><p>Plato archivado</p></div><button className="catalog-edit" type="button" onClick={() => archiveDish(dish, false)}>Restaurar</button><button className="catalog-edit catalog-delete" type="button" onClick={() => setDeleteDish(dish)}><Trash size={15} /> Eliminar</button></article>)}
             {categories.filter((item) => item.archived).map((item) => <article className="catalog-dish is-hidden" key={item.id}><div className="catalog-dish-main"><h3>{item.name}</h3><p>Categoría archivada</p></div><button className="catalog-edit" type="button" onClick={() => archiveCategory(item, false)}>Restaurar</button></article>)}
           </div>
         </section>
@@ -612,6 +625,7 @@ function CartaScreen({ menuDishes, categories, restaurant, onMenuDishes, onCateg
           onSave={saveDish}
         />
       )}
+      {deleteDish && <DeleteDishModal dish={deleteDish} onClose={() => setDeleteDish(null)} onDelete={permanentlyDeleteDish} />}
       {categoryModal && <CategoryModal
         mode={categoryModal.mode}
         category={categoryModal.category}
@@ -697,6 +711,41 @@ function DishEditor({ dish, categories = [], onNewCategory, onRemoveImage, onRem
           <span className="dish-save-status" role="status" aria-live="polite">{saveStatus}</span>
           <button className="secondary-button" type="button" onClick={close} disabled={saving}>Cancelar</button>
           <button className="primary-button" type="submit" disabled={saving}>{saving ? <SpinnerGap className="spin" size={17} /> : <Check size={17} />} {saving ? "Guardando…" : "Guardar plato"}</button>
+        </footer>
+      </form>
+    </div>
+  );
+}
+
+function DeleteDishModal({ dish, onClose, onDelete }) {
+  const [confirmation, setConfirmation] = useState("");
+  const [saving, setSaving] = useState(false);
+  const confirmed = confirmation.trim() === dish.name;
+  const close = () => { if (!saving) onClose(); };
+
+  const submit = async (event) => {
+    event.preventDefault();
+    if (!confirmed || saving) return;
+    setSaving(true);
+    try {
+      await onDelete(dish);
+    } catch {
+      // El flujo superior informa el error y deja abierto el diálogo para reintentar.
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="delete-dish-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && close()}>
+      <form className="delete-dish-modal" role="alertdialog" aria-modal="true" aria-labelledby="delete-dish-title" aria-describedby="delete-dish-description" onSubmit={submit}>
+        <p className="eyebrow">ACCIÓN IRREVERSIBLE</p>
+        <h2 id="delete-dish-title">Eliminar “{dish.name}”</h2>
+        <p id="delete-dish-description">Se eliminará definitivamente de la carta y también sus archivos de foto y video. Los pedidos históricos conservarán su detalle, pero ya no estarán vinculados a este plato.</p>
+        <label>Para confirmar, escribí exactamente <strong>{dish.name}</strong><input value={confirmation} onChange={(event) => setConfirmation(event.target.value)} disabled={saving} autoFocus /></label>
+        <footer>
+          <button className="secondary-button" type="button" onClick={close} disabled={saving}>Cancelar</button>
+          <button className="delete-dish-confirm" type="submit" disabled={!confirmed || saving}>{saving ? <SpinnerGap className="spin" size={17} /> : <Trash size={17} />} {saving ? "Eliminando…" : "Eliminar definitivamente"}</button>
         </footer>
       </form>
     </div>
@@ -1985,6 +2034,7 @@ export function App() {
     await loadRequests();
   };
   const archiveDish = (id, archive) => cartiaApi.archiveDish(id, archive, csrf);
+  const deleteDish = (id) => cartiaApi.deleteDish(id, csrf);
   const reorderDishes = (ids) => cartiaApi.reorderDishes(ids, csrf);
   const saveCategory = (category) => cartiaApi.saveCategory(category, csrf);
   const archiveCategory = (id, archive) => cartiaApi.archiveCategory(id, archive, csrf);
@@ -2042,7 +2092,7 @@ export function App() {
   }
 
   let content;
-  if (screen === "carta") content = <CartaScreen menuDishes={menuDishes} categories={categories} restaurant={restaurant} onMenuDishes={setMenuDishes} onCategories={setCategories} onToast={showToast} onOpenGuest={() => navigate("menu")} onSaveDish={saveDish} onRemoveImage={removeImage} onRemoveVideo={removeVideo} onArchiveDish={archiveDish} onReorderDishes={reorderDishes} onSaveCategory={saveCategory} onArchiveCategory={archiveCategory} onReorderCategories={reorderCategories} onRefresh={refreshCatalog} />;
+  if (screen === "carta") content = <CartaScreen menuDishes={menuDishes} categories={categories} restaurant={restaurant} onMenuDishes={setMenuDishes} onCategories={setCategories} onToast={showToast} onOpenGuest={() => navigate("menu")} onSaveDish={saveDish} onRemoveImage={removeImage} onRemoveVideo={removeVideo} onArchiveDish={archiveDish} onDeleteDish={deleteDish} onReorderDishes={reorderDishes} onSaveCategory={saveCategory} onArchiveCategory={archiveCategory} onReorderCategories={reorderCategories} onRefresh={refreshCatalog} />;
   else if (screen === "analitica") content = <AnaliticaScreen period={period} onPeriod={setPeriod} analytics={analytics} onNavigate={navigate} />;
   else if (screen === "mesas") content = <MesasScreen onToast={showToast} tables={tables} requests={requests} orders={orders} onAddTable={addTable} onArchiveTable={archiveTable} onResolveRequest={resolveRequest} onUpdateOrder={updateOrderStatus} />;
   else if (screen === "estilo") content = <StyleScreen onToast={showToast} serviceOptions={serviceOptions} onServiceOptions={setServiceOptions} visualTheme={visualTheme} onVisualTheme={setVisualTheme} onOpenGuest={() => navigate("menu")} restaurant={restaurant} menuDishes={menuDishes} onUploadLogo={uploadLogo} />;
