@@ -334,21 +334,31 @@ function CartaScreen({ menuDishes, categories, restaurant, onMenuDishes, onCateg
     });
   };
 
-  const saveDish = async (dish) => {
+  const saveDish = async (dish, onProgress) => {
     const normalized = { ...dish, name: dish.name.trim(), detail: dish.detail.trim(), isNew: undefined };
     if (!normalized.name || !/\d/.test(normalized.price || "")) {
       onToast("Completá el nombre y el precio");
-      return;
+      throw new Error("Completá el nombre y el precio");
     }
+    let saved;
     try {
-      const saved = await onSaveDish(normalized);
-      await onRefresh();
+      saved = await onSaveDish(normalized, onProgress);
     } catch (error) {
+      if (error.savedDish) {
+        setEditingDish((current) => current ? { ...current, databaseId: error.savedDish.databaseId, id: error.savedDish.id, isNew: false } : current);
+        onMenuDishes((current) => current.some((item) => item.databaseId === error.savedDish.databaseId)
+          ? current.map((item) => item.databaseId === error.savedDish.databaseId ? error.savedDish : item)
+          : [...current, error.savedDish]);
+      }
       onToast(error.message || "No se pudo guardar el plato");
-      return;
+      throw error;
     }
+    onMenuDishes((current) => current.some((item) => item.databaseId === saved.databaseId)
+      ? current.map((item) => item.databaseId === saved.databaseId ? saved : item)
+      : [...current, saved]);
     setEditingDish(null);
     onToast(dish.isNew ? "Plato agregado a la carta" : "Cambios guardados en la carta");
+    try { await onRefresh(); } catch { onToast("Plato guardado, pero no se pudo actualizar la lista. Recargá la página para ver los cambios."); }
   };
 
   const toggleAvailability = async (id) => {
@@ -449,7 +459,7 @@ function CartaScreen({ menuDishes, categories, restaurant, onMenuDishes, onCateg
             </div>
             {activeDishes.map((dish, index) => (
               <article className={`catalog-dish ${!dish.available ? "is-hidden" : ""}`} key={dish.id}>
-                <img src={dish.image} alt={dish.name} />
+                {dish.video?.url ? <video className="catalog-dish-media" src={dish.video.url} poster={dish.image || undefined} muted playsInline preload="metadata" onLoadedMetadata={(event) => { event.currentTarget.currentTime = Math.min(0.1, event.currentTarget.duration / 2 || 0); }} aria-label={`Video de ${dish.name}`} /> : dish.image ? <img className="catalog-dish-media" src={dish.image} alt="" /> : <span className="catalog-dish-media catalog-dish-placeholder"><ImageSquare size={23} aria-hidden="true" /></span>}
                 <div className="catalog-dish-main">
                   <div className="catalog-dish-tags">
                     <span>{dish.category}</span>
@@ -615,8 +625,37 @@ function CartaScreen({ menuDishes, categories, restaurant, onMenuDishes, onCateg
 
 function DishEditor({ dish, categories = [], onNewCategory, onRemoveImage, onRemoveVideo, onClose, onSave }) {
   const [draft, setDraft] = useState(dish);
+  const [saving, setSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState("");
+  const savingRef = useRef(false);
   const imageInputRef = useRef(null);
+  const [localVideoUrl, setLocalVideoUrl] = useState(null);
+  useEffect(() => {
+    if (!draft.videoFile) { setLocalVideoUrl(null); return undefined; }
+    const url = URL.createObjectURL(draft.videoFile);
+    setLocalVideoUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [draft.videoFile]);
   const update = (field, value) => setDraft((current) => ({ ...current, [field]: value }));
+  const close = () => { if (!savingRef.current) onClose(); };
+
+  const submit = async (event) => {
+    event.preventDefault();
+    if (savingRef.current) return;
+    savingRef.current = true;
+    setSaving(true);
+    setSaveStatus("Guardando plato…");
+    try {
+      await onSave(draft, setSaveStatus);
+    } catch (error) {
+      if (error.savedDish) setDraft((current) => ({ ...current, databaseId: error.savedDish.databaseId, id: error.savedDish.id, isNew: false }));
+      // El padre informa el error y mantiene abierto el editor para reintentar.
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
+      setSaveStatus("");
+    }
+  };
 
   const selectMedia = (file) => {
     if (!file) return;
@@ -631,19 +670,19 @@ function DishEditor({ dish, categories = [], onNewCategory, onRemoveImage, onRem
   };
 
   return (
-    <div className="dish-editor-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
-      <aside className="dish-editor" role="dialog" aria-modal="true" aria-label={dish.isNew ? "Nuevo plato" : `Editar ${dish.name}`}>
+    <div className="dish-editor-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && close()}>
+      <form className="dish-editor" role="dialog" aria-modal="true" aria-label={dish.isNew ? "Nuevo plato" : `Editar ${dish.name}`} onSubmit={submit}>
         <header>
           <div><p className="eyebrow">{dish.isNew ? "NUEVO PLATO" : "EDITAR PLATO"}</p><h2>{dish.isNew ? "Sumalo a tu carta" : "Afiná cada detalle"}</h2></div>
-          <button type="button" onClick={onClose} aria-label="Cerrar"><X size={20} /></button>
+          <button type="button" onClick={close} disabled={saving} aria-label="Cerrar"><X size={20} /></button>
         </header>
-        <button className="dish-image-picker" type="button" onClick={() => imageInputRef.current?.click()}>
-          {draft.image ? <img src={draft.image} alt="" /> : draft.videoFile || draft.video ? <span className="dish-media-empty"><VideoCamera size={28} /> {draft.videoFile ? draft.videoName : draft.video?.fileName}</span> : <span className="dish-media-empty"><ImageSquare size={28} /> Agregá una foto o video</span>}
-          <span className="dish-media-action">{draft.image || draft.videoFile || draft.video ? <><ImageSquare size={18} /> Cambiar contenido</> : <><ImageSquare size={18} /> Elegir contenido</>}</span>
-        </button>
-        {draft.image && draft.databaseId && <button className="text-button" type="button" onClick={async () => { try { await onRemoveImage(draft.databaseId); update("image", null); update("imageFile", undefined); } catch (error) { /* El padre muestra el error al usuario. */ } }}>Quitar foto</button>}
-        <input ref={imageInputRef} className="visually-hidden" type="file" accept="image/png,image/jpeg,image/webp,video/mp4" onChange={(event) => selectMedia(event.target.files?.[0])} />
-        <div className="dish-form">
+        <div className="dish-image-picker">
+          {localVideoUrl || (!draft.imageFile && draft.video?.url) ? <video src={localVideoUrl || draft.video.url} poster={draft.image || undefined} controls playsInline preload="metadata" aria-label={`Vista previa del video de ${draft.name || "este plato"}`} /> : draft.image ? <img src={draft.image} alt="Vista previa del plato" /> : <span className="dish-media-empty"><ImageSquare size={28} /> Agregá una foto o video</span>}
+          <button className="dish-media-action" type="button" disabled={saving} onClick={() => imageInputRef.current?.click()}><ImageSquare size={18} /> {draft.image || draft.videoFile || draft.video ? "Cambiar contenido" : "Elegir contenido"}</button>
+        </div>
+        {draft.image && draft.databaseId && <button className="text-button" type="button" disabled={saving} onClick={async () => { try { await onRemoveImage(draft.databaseId); update("image", null); update("imageFile", undefined); } catch (error) { /* El padre muestra el error al usuario. */ } }}>Quitar foto</button>}
+        <input ref={imageInputRef} className="visually-hidden" type="file" accept="image/png,image/jpeg,image/webp,video/mp4" disabled={saving} onChange={(event) => { selectMedia(event.target.files?.[0]); event.target.value = ""; }} />
+        <fieldset className="dish-form" disabled={saving}>
           <label>Nombre del plato<input value={draft.name} onChange={(event) => update("name", event.target.value)} placeholder="Ej. Risotto de hongos" /></label>
           <label>Descripción<textarea value={draft.detail} onChange={(event) => update("detail", event.target.value)} rows="3" placeholder="Ingredientes y una descripción breve" /></label>
           <div className="dish-form-row">
@@ -651,14 +690,15 @@ function DishEditor({ dish, categories = [], onNewCategory, onRemoveImage, onRem
             <label>Categoría<CartiaSelect value={draft.categoryId || ""} onChange={(next) => { const selected = categories.find((item) => item.id === next); update("categoryId", next); update("category", selected?.name || "Sin categoría"); }} ariaLabel="Categoría" options={categories.map((item) => ({ value: item.id, label: item.name }))} /><button className="category-create-button" type="button" onClick={onNewCategory}>+ Nueva categoría</button></label>
           </div>
           <label>Etiqueta<input value={draft.badge} onChange={(event) => update("badge", event.target.value)} placeholder="Ej. Favorito, Vegano" /></label>
-          {(draft.videoFile || draft.video) && <button className="text-button" type="button" onClick={async () => { if (draft.video && draft.databaseId) { try { await onRemoveVideo(draft.databaseId); } catch { return; } } update("video", null); update("videoFile", undefined); update("videoName", undefined); }}>Quitar video</button>}
+          {(draft.videoFile || draft.video) && <button className="text-button" type="button" disabled={saving} onClick={async () => { if (draft.video && draft.databaseId) { try { await onRemoveVideo(draft.databaseId); } catch { return; } } setDraft((current) => ({ ...current, video: null, videoFile: undefined, videoName: undefined })); }}>Quitar video</button>}
           <label className="dish-visible-toggle"><span><strong>Visible en la carta</strong><small>Podés ocultarlo temporalmente si se agota.</small></span><input type="checkbox" checked={draft.available} onChange={(event) => update("available", event.target.checked)} /><i /></label>
-        </div>
+        </fieldset>
         <footer>
-          <button className="secondary-button" type="button" onClick={onClose}>Cancelar</button>
-          <button className="primary-button" type="button" onClick={() => onSave(draft)}><Check size={17} /> Guardar plato</button>
+          <span className="dish-save-status" role="status" aria-live="polite">{saveStatus}</span>
+          <button className="secondary-button" type="button" onClick={close} disabled={saving}>Cancelar</button>
+          <button className="primary-button" type="submit" disabled={saving}>{saving ? <SpinnerGap className="spin" size={17} /> : <Check size={17} />} {saving ? "Guardando…" : "Guardar plato"}</button>
         </footer>
-      </aside>
+      </form>
     </div>
   );
 }
@@ -1900,26 +1940,30 @@ export function App() {
     if (authStatus === "superadmin") { setAuthStatus("authenticated"); navigate("inicio"); }
   };
   const refreshOrganizations = async () => { const data = await cartiaApi.organizations(); setOrganizations(data.organizations || []); };
-  const saveDish = async (dish) => {
+  const saveDish = async (dish, onProgress) => {
     if (!connected) return {};
     const response = await cartiaApi.saveDish(dish, csrf);
     let savedDish = response.dish;
     if (dish.imageFile) {
+      onProgress?.("Subiendo foto…");
       try {
         const uploaded = await cartiaApi.uploadDishImage(dish.imageFile, savedDish.databaseId, csrf);
         savedDish = { ...savedDish, image: uploaded.image, imageFile: undefined };
       } catch (error) {
-        await refreshCatalog();
-        throw new Error(`El plato fue guardado, pero no se pudo cargar la foto. Podés reintentarla al editarlo. ${error.message || ""}`.trim());
+        const failure = new Error(`El plato fue guardado, pero no se pudo cargar la foto. Podés reintentarla al editarlo. ${error.message || ""}`.trim());
+        failure.savedDish = savedDish;
+        throw failure;
       }
     }
     if (dish.videoFile) {
+      onProgress?.("Subiendo video…");
       try {
-        const uploaded = await cartiaApi.uploadVideo(dish.videoFile, savedDish, {}, csrf);
+        const uploaded = await cartiaApi.uploadVideo(dish.videoFile, savedDish, {}, csrf, (percent) => onProgress?.(percent === 100 ? "Procesando video…" : `Subiendo video · ${percent}%`));
         savedDish = { ...savedDish, video: uploaded.video, videoFile: undefined, videoName: undefined };
       } catch (error) {
-        await refreshCatalog();
-        throw new Error(`El plato fue guardado, pero no se pudo cargar el video. Podés reintentarla al editarlo. ${error.message || ""}`.trim());
+        const failure = new Error(`El plato fue guardado, pero no se pudo cargar el video. Podés reintentarlo al editarlo. ${error.message || ""}`.trim());
+        failure.savedDish = savedDish;
+        throw failure;
       }
     }
     return savedDish;
