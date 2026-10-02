@@ -5838,3 +5838,61 @@ button:disabled {
   background: linear-gradient(150deg, #2b5140, #173d31);
   color: rgba(255, 255, 255, 0.62);
 }
+
+/* Reels a pantalla completa: layout estable en iOS/Safari y fundido inferior. */
+.guest-page.guest-reels {
+  height: 100dvh;
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+.guest-reels .guest-menu-app {
+  height: 100dvh;
+  min-height: 0;
+  padding-top: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+}
+
+.guest-reels .guest-header {
+  flex: 0 0 auto;
+  height: calc(68px + env(safe-area-inset-top));
+  padding-top: env(safe-area-inset-top);
+}
+
+.guest-reels .guest-view-switch {
+  flex: 0 0 auto;
+}
+
+.guest-reels .reel-feed {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: auto;
+  touch-action: pan-y;
+  overscroll-behavior-y: contain;
+}
+
+.guest-reels .dish-reel {
+  scroll-snap-stop: normal;
+}
+
+.guest-reels .guest-menu-app::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: calc(150px + env(safe-area-inset-bottom));
+  pointer-events: none;
+  z-index: 6;
+  -webkit-backdrop-filter: blur(16px) saturate(1.15);
+  backdrop-filter: blur(16px) saturate(1.15);
+  background: linear-gradient(to bottom, rgba(246, 240, 229, 0) 0%, rgba(246, 240, 229, 0.18) 55%, rgba(246, 240, 229, 0.5) 100%);
+  background: linear-gradient(to bottom, color-mix(in srgb, var(--guest-paper) 0%, transparent) 0%, color-mix(in srgb, var(--guest-paper) 22%, transparent) 55%, color-mix(in srgb, var(--guest-paper) 55%, transparent) 100%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 62%);
+  mask-image: linear-gradient(to bottom, transparent 0%, #000 62%);
+}
