@@ -48,4 +48,8 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
           envs: API_IMAGE,WEB_IMAGE
-          script: export VPS_DEPLOY_PATH='${{ secrets.VPS_DEPLOY_PATH }}'; git -C "$VPS_DEPLOY_PATH" pull --ff-only origin main; sh "$VPS_DEPLOY_PATH/scripts/vps-release.sh"
+          script: |
+            export VPS_DEPLOY_PATH='${{ secrets.VPS_DEPLOY_PATH }}'
+            git -C "$VPS_DEPLOY_PATH" checkout -- compose.production.yml || true
+            git -C "$VPS_DEPLOY_PATH" pull --ff-only origin main
+            sh "$VPS_DEPLOY_PATH/scripts/vps-release.sh"
