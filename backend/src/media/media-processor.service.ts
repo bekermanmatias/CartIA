@@ -100,12 +100,35 @@ export class MediaProcessor {
   }
 
   /**
+   * Regenerates a poster from an already-stored video buffer (used for
+   * maintenance of existing videos). Best-effort: returns null on failure.
+   */
+  async regeneratePoster(videoBuffer: Buffer): Promise<Buffer | null> {
+    let directory: string | undefined;
+    try {
+      directory = await mkdtemp(join(tmpdir(), 'cartia-poster-'));
+      const input = join(directory, 'input.mp4');
+      const target = join(directory, 'poster.jpg');
+      await writeFile(input, videoBuffer);
+      const done = await this.capturePoster(input, target);
+      if (!done) return null;
+      return await readFile(target).catch(() => null);
+    } catch (error) {
+      this.logger.warn(`No se pudo regenerar la miniatura: ${(error as Error).message}`);
+      return null;
+    } finally {
+      if (directory) await rm(directory, { recursive: true, force: true }).catch(() => undefined);
+    }
+  }
+
+  /**
    * Grabs a single JPEG frame to use as the dish cover when it has no photo.
-   * Tries one second in (nicer composition) and falls back to the first frame
-   * for very short clips. Returns null when ffmpeg cannot read a frame.
+   * Tries the first frame first (matches the start of the looping video and
+   * avoids a flicker when playback begins) and falls back to one second in.
+   * Returns null when ffmpeg cannot read a frame.
    */
   private async capturePoster(video: string, target: string): Promise<Buffer | null> {
-    for (const seek of ['1', '0']) {
+    for (const seek of ['0', '1']) {
       const done = await this.runFfmpeg(
         [
           '-hide_banner', '-loglevel', 'error', '-y',

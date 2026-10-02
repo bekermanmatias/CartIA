@@ -27,4 +27,6 @@ for attempt in 1 2 3 4 5 6; do
 done
 printf 'Optimizando media existente (miniaturas de video y faststart)...\n'
 docker compose -f compose.production.yml exec -T api node dist/src/media/reprocess.js || printf 'Reproceso de media omitido o con errores (no bloquea el deploy).\n'
+printf 'Regenerando miniaturas desde el primer frame para evitar parpadeo...\n'
+docker compose -f compose.production.yml exec -T api node dist/src/media/reprocess.js --posters || printf 'Regeneracion de miniaturas omitida o con errores (no bloquea el deploy).\n'
 docker compose -f compose.production.yml exec -T api node -e "fetch('http://127.0.0.1:3000/api/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"

@@ -12,14 +12,18 @@ import { StorageService } from './storage.service';
  *
  * By default it only touches dishes without a cover (the actual pending work).
  * Pass `--all` to force every video through the pipeline.
+ * Pass `--posters` to only regenerate poster frames for covers that were
+ * previously created from a video frame.
  *
  * Usage (on the server, with the same env as the API):
  *   npm run media:reprocess
  *   npm run media:reprocess -- --all
+ *   npm run media:reprocess -- --posters
  */
 const force = process.argv.includes('--all');
+const postersOnly = process.argv.includes('--posters');
 
-async function main() {
+async function reprocessVideos() {
   const prisma = new PrismaClient();
   const storage = new StorageService();
   const processor = new MediaProcessor();
@@ -100,6 +104,77 @@ async function main() {
     console.log(`Listo. Procesados: ${processed} · Miniaturas nuevas: ${posters} · Omitidos: ${skipped} · Fallidos: ${failed}`);
   } finally {
     await prisma.$disconnect();
+  }
+}
+
+async function regeneratePosters() {
+  const prisma = new PrismaClient();
+  const storage = new StorageService();
+  const processor = new MediaProcessor();
+
+  let regenerated = 0;
+  let skipped = 0;
+  let failed = 0;
+
+  try {
+    const covers = await prisma.media.findMany({
+      where: {
+        kind: 'IMAGE',
+        published: true,
+        dishId: { not: null },
+        originalName: 'miniatura-video.jpg',
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+    console.log(`Miniaturas a regenerar: ${covers.length}`);
+
+    for (const cover of covers) {
+      const dishId = cover.dishId as string;
+      try {
+        const video = await prisma.media.findFirst({
+          where: { locationId: cover.locationId, dishId, kind: 'VIDEO', published: true },
+        });
+        if (!video) {
+          skipped += 1;
+          console.log(`SIN VIDEO ${dishId}`);
+          continue;
+        }
+
+        const response = await fetch(video.path);
+        if (!response.ok) throw new Error(`no se pudo descargar el video (${response.status})`);
+        const videoBuffer = Buffer.from(await response.arrayBuffer());
+
+        const poster = await processor.regeneratePoster(videoBuffer);
+        if (!poster) throw new Error('ffmpeg no pudo extraer la miniatura');
+        if (!cover.storageKey) throw new Error('la miniatura no tiene storageKey');
+
+        await storage.put({ key: cover.storageKey, body: poster, mimeType: 'image/jpeg' });
+        await prisma.media.update({
+          where: { id: cover.id },
+          data: {
+            mimeType: 'image/jpeg',
+            bytes: BigInt(poster.length),
+          },
+        });
+        regenerated += 1;
+        console.log(`OK ${dishId} · miniatura regenerada (${poster.length} bytes)`);
+      } catch (error) {
+        failed += 1;
+        console.error(`FALLO ${dishId}: ${error instanceof Error ? error.message : error}`);
+      }
+    }
+
+    console.log(`Listo. Regeneradas: ${regenerated} · Omitidas: ${skipped} · Fallidas: ${failed}`);
+  } finally {
+    await prisma.$disconnect();
+  }
+}
+
+async function main() {
+  if (postersOnly) {
+    await regeneratePosters();
+  } else {
+    await reprocessVideos();
   }
 }
 
