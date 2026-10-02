@@ -17,7 +17,9 @@ docker compose -f compose.production.yml pull api web
 docker compose -f compose.production.yml run --rm api npx prisma migrate deploy
 docker compose -f compose.production.yml up -d --remove-orphans
 for attempt in 1 2 3 4 5 6; do
-  docker compose -f compose.production.yml exec -T api node -e "fetch('http://127.0.0.1:3000/api/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))" && exit 0
+  docker compose -f compose.production.yml exec -T api node -e "fetch('http://127.0.0.1:3000/api/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))" && break
   sleep 5
 done
-exit 1
+printf 'Optimizando media existente (miniaturas de video y faststart)...\n'
+docker compose -f compose.production.yml exec -T api node dist/src/media/reprocess.js || printf 'Reproceso de media omitido o con errores (no bloquea el deploy).\n'
+docker compose -f compose.production.yml exec -T api node -e "fetch('http://127.0.0.1:3000/api/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
