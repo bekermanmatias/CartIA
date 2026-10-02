@@ -5757,6 +5757,26 @@ button:disabled {
   object-fit: cover;
 }
 
+/* Crossfade de la miniatura: se desvanece cuando el video empieza a reproducir. */
+.dish-reel-poster {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  transition: opacity 0.4s ease;
+}
+
+.dish-reel-poster.is-hidden {
+  opacity: 0;
+}
+
+.dish-reel-poster > img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+
 /* Pulido UX de la vista pública (iPhone/Safari, safe-areas y legibilidad). */
 .guest-header {
   box-shadow: 0 1px 0 #e8e1d6, 0 10px 26px -22px rgba(35, 45, 38, 0.5);

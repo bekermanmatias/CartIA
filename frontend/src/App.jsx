@@ -786,6 +786,7 @@ function GuestMenu({ videoAssets, menuDishes, serviceOptions, visualTheme, resta
   const [category, setCategory] = useState("Todos");
   const [muted, setMuted] = useState(true);
   const [activeReel, setActiveReel] = useState(0);
+  const [playingReel, setPlayingReel] = useState(-1);
   const [selection, setSelection] = useState({});
   const [selectionOpen, setSelectionOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -962,26 +963,33 @@ function GuestMenu({ videoAssets, menuDishes, serviceOptions, visualTheme, resta
               const nearReel = Math.abs(index - activeReel) <= 2;
               return (
               <article className="dish-reel" key={dish.id} aria-label={`${dish.name}, ${dish.price}`}>
-                <div className="dish-reel-image">
-                  {dish.image && (!nearReel || !videoUrl) && <img src={dish.image} alt="" loading={nearReel ? "eager" : "lazy"} decoding="async" />}
-                </div>
-                {videoUrl && <video
+                {videoUrl ? <video
                   ref={(node) => {
                     if (node) reelVideoRefs.current.set(index, node);
                     else reelVideoRefs.current.delete(index);
                   }}
                   src={nearReel ? videoUrl : undefined}
-                  poster={nearReel ? dish.image || undefined : undefined}
                   autoPlay={index === activeReel}
                   muted={muted}
                   loop
                   playsInline
                   preload={index === activeReel || Math.abs(index - activeReel) === 1 ? "auto" : "metadata"}
+                  onPlaying={() => setPlayingReel(index)}
+                  onPause={() => setPlayingReel((current) => (current === index ? -1 : current))}
                   onCanPlay={(event) => {
                     if (viewMode === "reels" && index === activeReel) event.currentTarget.play().catch(() => null);
                   }}
                   aria-label={`Video en loop de ${dish.name}`}
-                />}
+                /> : (
+                  <div className="dish-reel-image">
+                    {dish.image && <img src={dish.image} alt="" loading="lazy" decoding="async" />}
+                  </div>
+                )}
+                {videoUrl && dish.image && (
+                  <div className={`dish-reel-poster${playingReel === index ? " is-hidden" : ""}`} aria-hidden="true">
+                    <img src={dish.image} alt="" loading={nearReel ? "eager" : "lazy"} decoding="async" />
+                  </div>
+                )}
                 <div className="dish-reel-shade" />
                 {videoUrl && <div className="dish-reel-top">
                   <span><VideoCamera size={13} weight="fill" /> VIDEO DEL PLATO</span>
