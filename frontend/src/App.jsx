@@ -976,7 +976,7 @@ function GuestMenu({ videoAssets, menuDishes, serviceOptions, visualTheme, resta
                   muted={muted}
                   loop
                   playsInline
-                  preload={index === activeReel ? "auto" : "metadata"}
+                  preload={index === activeReel || index === activeReel + 1 ? "auto" : "metadata"}
                   onCanPlay={(event) => {
                     if (viewMode === "reels" && index === activeReel) event.currentTarget.play().catch(() => null);
                   }}
