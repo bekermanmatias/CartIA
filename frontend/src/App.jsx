@@ -1039,7 +1039,9 @@ function GuestMenu({ videoAssets, menuDishes, serviceOptions, visualTheme, resta
                 {filteredDishes.map((dish) => (
                   <article key={dish.id} className="guest-dish-list-card" role="button" tabIndex="0" onClick={() => openReel(dish)} onKeyDown={(event) => event.key === "Enter" && openReel(dish)}>
                     <div className="guest-list-media">
-                      <img src={dish.image} alt={dish.name} loading="lazy" decoding="async" />
+                      {dish.image
+                        ? <img src={dish.image} alt={dish.name} loading="lazy" decoding="async" />
+                        : <div className="guest-list-media-fallback" aria-hidden="true"><VideoCamera size={26} weight="fill" /></div>}
                       <span><Play size={14} weight="fill" /> Ver video</span>
                     </div>
                     <div>
@@ -1081,7 +1083,9 @@ function GuestMenu({ videoAssets, menuDishes, serviceOptions, visualTheme, resta
             <div className="selection-items">
               {selectedDishes.map((dish) => (
                 <article key={dish.id}>
-                  <img src={dish.image} alt="" loading="lazy" decoding="async" />
+                  {dish.image
+                    ? <img src={dish.image} alt="" loading="lazy" decoding="async" />
+                    : <div className="selection-thumb-fallback" aria-hidden="true"><VideoCamera size={16} weight="fill" /></div>}
                   <div><strong>{dish.name}</strong><small>{dish.price}</small></div>
                   <div className="quantity-control"><button type="button" onClick={() => changeQuantity(dish.id, -1)}>−</button><span>{selection[dish.id]}</span><button type="button" onClick={() => changeQuantity(dish.id, 1)}>+</button></div>
                 </article>

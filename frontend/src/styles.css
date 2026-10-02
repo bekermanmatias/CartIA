@@ -5811,3 +5811,30 @@ button:disabled {
 }
 
 .guest-service-dock { bottom: calc(12px + env(safe-area-inset-bottom)); }
+
+/* Placeholder de media cuando el plato no tiene imagen (solo video). */
+.guest-list-media-fallback {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(130% 130% at 28% 18%, rgba(255, 255, 255, 0.12), transparent 58%),
+    linear-gradient(150deg, #2b5140, #173d31);
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.guest-list-media-fallback > svg {
+  width: 34px;
+  height: 34px;
+}
+
+.selection-thumb-fallback {
+  width: 58px;
+  height: 58px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: linear-gradient(150deg, #2b5140, #173d31);
+  color: rgba(255, 255, 255, 0.62);
+}
