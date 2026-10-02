@@ -3,6 +3,11 @@ set -eu
 cd "${VPS_DEPLOY_PATH:?VPS_DEPLOY_PATH is required}"
 stamp=$(date +%Y%m%d-%H%M%S)
 printf 'API_IMAGE=%s\nWEB_IMAGE=%s\n' "$API_IMAGE" "$WEB_IMAGE" > .release.env
+# Asegurar que el compose portable no tenga modificaciones locales que bloqueen el pull.
+git -C "$VPS_DEPLOY_PATH" checkout -- compose.production.yml || true
+
+git -C "$VPS_DEPLOY_PATH" pull --ff-only origin main
+
 set -a; . ./.env; . ./.release.env; set +a
 mkdir -p backups
 docker compose -f compose.production.yml up -d db
