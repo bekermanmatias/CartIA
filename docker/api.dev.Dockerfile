@@ -1,5 +1,6 @@
 FROM node:22-alpine
 WORKDIR /app
+RUN apk add --no-cache ffmpeg
 COPY backend/package*.json ./
 RUN npm ci
 COPY backend ./

@@ -18,7 +18,8 @@ describe('MediaService', () => {
     location: { update: jest.fn() },
   };
   const storage = { put: jest.fn(), remove: jest.fn() };
-  const service = new MediaService(prisma as any, access as any, storage as any);
+  const processor = { optimizeImage: jest.fn().mockResolvedValue(null), optimizeVideo: jest.fn().mockResolvedValue(null) };
+  const service = new MediaService(prisma as any, access as any, storage as any, processor as any);
 
   beforeEach(() => {
     jest.resetAllMocks();

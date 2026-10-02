@@ -3,6 +3,7 @@ import { randomUUID } from 'crypto';
 import { Prisma } from '@prisma/client';
 import { AccessService } from '../access/access.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { MediaProcessor } from './media-processor.service';
 import { StorageService } from './storage.service';
 
 type UploadFile = Express.Multer.File;
@@ -18,6 +19,7 @@ export class MediaService {
     private readonly prisma: PrismaService,
     private readonly access: AccessService,
     private readonly storage: StorageService,
+    private readonly processor: MediaProcessor,
   ) {}
 
   private validate(file: UploadFile | undefined, kind: MediaKind) {
@@ -53,7 +55,8 @@ export class MediaService {
   }) {
     const extension = this.validate(input.file, input.kind);
     const key = `organizations/${input.location.organizationId}/locations/${input.location.id}/${input.kind.toLowerCase()}/${randomUUID()}.${extension}`;
-    const stored = await this.storage.put({ key, body: input.file.buffer, mimeType: input.file.mimetype });
+    const optimized = await this.optimize(input.kind, input.file, input.metadata);
+    const stored = await this.storage.put({ key, body: optimized.body, mimeType: optimized.mimeType });
     const previous = await this.prisma.media.findFirst({
       where: { locationId: input.location.id, dishId: input.dishId ?? null, kind: input.kind },
       orderBy: { updatedAt: 'desc' },
@@ -64,11 +67,11 @@ export class MediaService {
         path: stored.url,
         storageKey: stored.key,
         originalName: input.file.originalname.slice(0, 255),
-        mimeType: input.file.mimetype,
-        bytes: BigInt(input.file.size),
-        durationSeconds: input.metadata?.durationSeconds ?? null,
-        width: input.metadata?.width ?? null,
-        height: input.metadata?.height ?? null,
+        mimeType: optimized.mimeType,
+        bytes: BigInt(optimized.body.length),
+        durationSeconds: optimized.metadata?.durationSeconds ?? null,
+        width: optimized.metadata?.width ?? null,
+        height: optimized.metadata?.height ?? null,
         published: true,
       };
       const media = previous
@@ -80,6 +83,27 @@ export class MediaService {
       await this.storage.remove(stored.key);
       throw error;
     }
+  }
+
+  private async optimize(
+    kind: MediaKind,
+    file: UploadFile,
+    metadata?: { durationSeconds?: number; width?: number; height?: number },
+  ): Promise<{ body: Buffer; mimeType: string; metadata?: { durationSeconds?: number; width?: number; height?: number } }> {
+    if (kind === 'VIDEO') {
+      const video = await this.processor.optimizeVideo(file.buffer);
+      if (video) {
+        return {
+          body: video.buffer,
+          mimeType: video.mimeType,
+          metadata: { durationSeconds: video.durationSeconds, width: video.width, height: video.height },
+        };
+      }
+    } else {
+      const image = await this.processor.optimizeImage(file.buffer, file.mimetype);
+      if (image) return { body: image.buffer, mimeType: image.mimeType };
+    }
+    return { body: file.buffer, mimeType: file.mimetype, metadata };
   }
 
   async uploadImage(userId: string, activeLocationId: string | undefined, dishId: string, file: UploadFile) {

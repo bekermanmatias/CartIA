@@ -10,6 +10,7 @@ WORKDIR /app
 ENV NODE_ENV=production
 COPY backend/package*.json ./
 RUN npm ci --omit=dev
+RUN apk add --no-cache ffmpeg
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/prisma ./prisma
 COPY --from=build /app/src/sandbox/fixtures ./fixtures

@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import QRCode from "qrcode";
 import { cartiaApi, getPublicParams } from "./api.js";
 import { CartiaSelect } from "./components/CartiaSelect.jsx";
 import {
@@ -958,27 +957,33 @@ function GuestMenu({ videoAssets, menuDishes, serviceOptions, visualTheme, resta
 
         {viewMode === "reels" ? (
           <section className="reel-feed" ref={reelFeedRef} onScroll={handleReelScroll} aria-label="Videos de los platos">
-            {availableDishes.map((dish, index) => (
+            {availableDishes.map((dish, index) => {
+              const videoUrl = dishVideo(dish);
+              const nearReel = Math.abs(index - activeReel) <= 1;
+              return (
               <article className="dish-reel" key={dish.id} aria-label={`${dish.name}, ${dish.price}`}>
-                {dishVideo(dish) ? <video
+                <div className="dish-reel-image">
+                  {dish.image && (!nearReel || !videoUrl) && <img src={dish.image} alt="" loading={nearReel ? "eager" : "lazy"} decoding="async" />}
+                </div>
+                {videoUrl && <video
                   ref={(node) => {
                     if (node) reelVideoRefs.current.set(index, node);
                     else reelVideoRefs.current.delete(index);
                   }}
-                  src={dishVideo(dish)}
-                  poster={dish.image}
-                  autoPlay={index === 0}
+                  src={nearReel ? videoUrl : undefined}
+                  poster={nearReel ? dish.image || undefined : undefined}
+                  autoPlay={index === activeReel}
                   muted={muted}
                   loop
                   playsInline
-                  preload={index < 2 ? "auto" : "metadata"}
+                  preload={index === activeReel ? "auto" : "metadata"}
                   onCanPlay={(event) => {
                     if (viewMode === "reels" && index === activeReel) event.currentTarget.play().catch(() => null);
                   }}
                   aria-label={`Video en loop de ${dish.name}`}
-                /> : <div className="dish-reel-image" style={{ backgroundImage: dish.image ? `url(${dish.image})` : undefined }} />}
+                />}
                 <div className="dish-reel-shade" />
-                {dishVideo(dish) && <div className="dish-reel-top">
+                {videoUrl && <div className="dish-reel-top">
                   <span><VideoCamera size={13} weight="fill" /> VIDEO DEL PLATO</span>
                   <button type="button" onClick={() => setMuted((value) => !value)} aria-label={muted ? "Activar sonido" : "Silenciar videos"}>
                     {muted ? <SpeakerSlash size={18} weight="fill" /> : <SpeakerHigh size={18} weight="fill" />}
@@ -999,11 +1004,12 @@ function GuestMenu({ videoAssets, menuDishes, serviceOptions, visualTheme, resta
                   <div className="dish-reel-meta"><span>{dish.category}</span>{dish.badge && <span>{dish.badge}</span>}</div>
                   <h1>{dish.name}</h1>
                   <p>{dish.detail}</p>
-                  <div><strong>{dish.price}</strong>{dishVideo(dish) && <span><Play size={10} weight="fill" /> Se repite en loop</span>}</div>
+                  <div><strong>{dish.price}</strong>{videoUrl && <span><Play size={10} weight="fill" /> Se repite en loop</span>}</div>
                 </div>
                 {index < availableDishes.length - 1 && <span className="reel-next-cue">Deslizá para ver el siguiente</span>}
               </article>
-            ))}
+              );
+            })}
           </section>
         ) : (
           <div className="guest-list-view">
@@ -1033,7 +1039,7 @@ function GuestMenu({ videoAssets, menuDishes, serviceOptions, visualTheme, resta
                 {filteredDishes.map((dish) => (
                   <article key={dish.id} className="guest-dish-list-card" role="button" tabIndex="0" onClick={() => openReel(dish)} onKeyDown={(event) => event.key === "Enter" && openReel(dish)}>
                     <div className="guest-list-media">
-                      <img src={dish.image} alt={dish.name} />
+                      <img src={dish.image} alt={dish.name} loading="lazy" decoding="async" />
                       <span><Play size={14} weight="fill" /> Ver video</span>
                     </div>
                     <div>
@@ -1075,7 +1081,7 @@ function GuestMenu({ videoAssets, menuDishes, serviceOptions, visualTheme, resta
             <div className="selection-items">
               {selectedDishes.map((dish) => (
                 <article key={dish.id}>
-                  <img src={dish.image} alt="" />
+                  <img src={dish.image} alt="" loading="lazy" decoding="async" />
                   <div><strong>{dish.name}</strong><small>{dish.price}</small></div>
                   <div className="quantity-control"><button type="button" onClick={() => changeQuantity(dish.id, -1)}>−</button><span>{selection[dish.id]}</span><button type="button" onClick={() => changeQuantity(dish.id, 1)}>+</button></div>
                 </article>
@@ -1127,12 +1133,12 @@ function TableQrModal({ table, onClose, onToast, onArchive }) {
   const [qrData, setQrData] = useState("");
 
   useEffect(() => {
-    QRCode.toDataURL(table.menuUrl, {
+    import("qrcode").then(({ default: QRCode }) => QRCode.toDataURL(table.menuUrl, {
       width: 900,
       margin: 3,
       color: { dark: "#173d31", light: "#fffdf8" },
       errorCorrectionLevel: "H",
-    }).then(setQrData).catch(() => onToast("No se pudo generar el QR"));
+    })).then(setQrData).catch(() => onToast("No se pudo generar el QR"));
   }, [table.menuUrl]);
 
   const download = () => {
