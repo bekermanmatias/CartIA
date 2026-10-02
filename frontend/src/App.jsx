@@ -959,7 +959,7 @@ function GuestMenu({ videoAssets, menuDishes, serviceOptions, visualTheme, resta
           <section className="reel-feed" ref={reelFeedRef} onScroll={handleReelScroll} aria-label="Videos de los platos">
             {availableDishes.map((dish, index) => {
               const videoUrl = dishVideo(dish);
-              const nearReel = Math.abs(index - activeReel) <= 1;
+              const nearReel = Math.abs(index - activeReel) <= 2;
               return (
               <article className="dish-reel" key={dish.id} aria-label={`${dish.name}, ${dish.price}`}>
                 <div className="dish-reel-image">
@@ -976,7 +976,7 @@ function GuestMenu({ videoAssets, menuDishes, serviceOptions, visualTheme, resta
                   muted={muted}
                   loop
                   playsInline
-                  preload={index === activeReel || index === activeReel + 1 ? "auto" : "metadata"}
+                  preload={index === activeReel || Math.abs(index - activeReel) === 1 ? "auto" : "metadata"}
                   onCanPlay={(event) => {
                     if (viewMode === "reels" && index === activeReel) event.currentTarget.play().catch(() => null);
                   }}
