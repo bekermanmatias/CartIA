@@ -11,10 +11,12 @@ export type ProcessedVideo = {
   width?: number;
   height?: number;
   durationSeconds?: number;
+  poster?: Buffer;
 };
 
 const VIDEO_TIMEOUT_MS = 180_000;
 const MAX_VIDEO_WIDTH = 1280;
+const POSTER_WIDTH = 720;
 const IMAGE_MAX_WIDTH = 1600;
 const IMAGE_QUALITY = 82;
 
@@ -87,13 +89,39 @@ export class MediaProcessor {
       const optimized = await readFile(output);
       if (!optimized.length) return null;
       const probe = await this.probe(output);
-      return { buffer: optimized, mimeType: 'video/mp4', ...probe };
+      const poster = await this.capturePoster(output, join(directory, 'poster.jpg'));
+      return { buffer: optimized, mimeType: 'video/mp4', ...probe, poster: poster ?? undefined };
     } catch (error) {
       this.logger.warn(`No se pudo optimizar el video: ${(error as Error).message}`);
       return null;
     } finally {
       if (directory) await rm(directory, { recursive: true, force: true }).catch(() => undefined);
     }
+  }
+
+  /**
+   * Grabs a single JPEG frame to use as the dish cover when it has no photo.
+   * Tries one second in (nicer composition) and falls back to the first frame
+   * for very short clips. Returns null when ffmpeg cannot read a frame.
+   */
+  private async capturePoster(video: string, target: string): Promise<Buffer | null> {
+    for (const seek of ['1', '0']) {
+      const done = await this.runFfmpeg(
+        [
+          '-hide_banner', '-loglevel', 'error', '-y',
+          '-ss', seek, '-i', video,
+          '-frames:v', '1',
+          '-vf', `scale='min(${POSTER_WIDTH},iw)':-2`,
+          '-q:v', '3',
+          target,
+        ],
+        target,
+      );
+      if (!done) continue;
+      const poster = await readFile(target).catch(() => null);
+      if (poster?.length) return poster;
+    }
+    return null;
   }
 
   private runFfmpeg(args: string[], expectedOutput: string): Promise<FfmpegResult> {

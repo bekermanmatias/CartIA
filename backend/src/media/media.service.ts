@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { Prisma } from '@prisma/client';
 import { AccessService } from '../access/access.service';
@@ -15,6 +15,8 @@ const imageMimeTypes = new Map([['image/jpeg', 'jpg'], ['image/png', 'png'], ['i
 
 @Injectable()
 export class MediaService {
+  private readonly logger = new Logger(MediaService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly access: AccessService,
@@ -78,7 +80,42 @@ export class MediaService {
         ? await this.prisma.media.update({ where: { id: previous.id }, data: values })
         : await this.prisma.media.create({ data: { locationId: input.location.id, dishId: input.dishId, kind: input.kind, ...values } });
       await this.storage.remove(previous?.storageKey);
+      if (input.kind === 'VIDEO' && input.dishId && optimized.poster) {
+        await this.ensurePoster(input.location, input.dishId, optimized.poster).catch((error) =>
+          this.logger.warn(`No se pudo guardar la miniatura del video: ${(error as Error).message}`),
+        );
+      }
       return media;
+    } catch (error) {
+      await this.storage.remove(stored.key);
+      throw error;
+    }
+  }
+
+  /**
+   * Stores the frame grabbed from a video as the dish cover, but only when the
+   * dish has no photo yet so a real image is never overwritten. This makes the
+   * public list and the reel poster show the dish instead of a placeholder.
+   */
+  private async ensurePoster(location: { id: string; organizationId: string }, dishId: string, poster: Buffer) {
+    const existing = await this.prisma.media.findFirst({ where: { locationId: location.id, dishId, kind: 'IMAGE' } });
+    if (existing) return;
+    const key = `organizations/${location.organizationId}/locations/${location.id}/image/${randomUUID()}.jpg`;
+    const stored = await this.storage.put({ key, body: poster, mimeType: 'image/jpeg' });
+    try {
+      await this.prisma.media.create({
+        data: {
+          locationId: location.id,
+          dishId,
+          kind: 'IMAGE',
+          path: stored.url,
+          storageKey: stored.key,
+          originalName: 'miniatura-video.jpg',
+          mimeType: 'image/jpeg',
+          bytes: BigInt(poster.length),
+          published: true,
+        },
+      });
     } catch (error) {
       await this.storage.remove(stored.key);
       throw error;
@@ -89,13 +126,14 @@ export class MediaService {
     kind: MediaKind,
     file: UploadFile,
     metadata?: { durationSeconds?: number; width?: number; height?: number },
-  ): Promise<{ body: Buffer; mimeType: string; metadata?: { durationSeconds?: number; width?: number; height?: number } }> {
+  ): Promise<{ body: Buffer; mimeType: string; poster?: Buffer; metadata?: { durationSeconds?: number; width?: number; height?: number } }> {
     if (kind === 'VIDEO') {
       const video = await this.processor.optimizeVideo(file.buffer);
       if (video) {
         return {
           body: video.buffer,
           mimeType: video.mimeType,
+          poster: video.poster,
           metadata: { durationSeconds: video.durationSeconds, width: video.width, height: video.height },
         };
       }
