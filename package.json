@@ -14,6 +14,7 @@
     "test:sites": "node --test tests/sites-worker.test.mjs",
     "test:api": "npm --prefix backend test",
     "typecheck": "npm --prefix backend run typecheck",
-    "test": "npm run test:sites && npm run test:api"
+    "test:dishes": "node --test tests/dish-save.test.mjs",
+    "test": "npm run test:dishes && npm run test:sites && npm run test:api"
   }
 }

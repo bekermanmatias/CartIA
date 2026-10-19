@@ -640,6 +640,10 @@ function DishEditor({ dish, categories = [], onNewCategory, onRemoveImage, onRem
   const [draft, setDraft] = useState(dish);
   const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState("");
+  const [saveError, setSaveError] = useState("");
+  useEffect(() => {
+    setDraft((current) => ({ ...current, categoryId: dish.categoryId, category: dish.category }));
+  }, [dish.categoryId, dish.category]);
   const savingRef = useRef(false);
   const imageInputRef = useRef(null);
   const [localVideoUrl, setLocalVideoUrl] = useState(null);
@@ -657,12 +661,13 @@ function DishEditor({ dish, categories = [], onNewCategory, onRemoveImage, onRem
     if (savingRef.current) return;
     savingRef.current = true;
     setSaving(true);
+    setSaveError("");
     setSaveStatus("Guardando plato…");
     try {
       await onSave(draft, setSaveStatus);
     } catch (error) {
       if (error.savedDish) setDraft((current) => ({ ...current, databaseId: error.savedDish.databaseId, id: error.savedDish.id, isNew: false }));
-      // El padre informa el error y mantiene abierto el editor para reintentar.
+      setSaveError(error.message || "No se pudo guardar el plato. Reintentá.");
     } finally {
       savingRef.current = false;
       setSaving(false);
@@ -707,7 +712,7 @@ function DishEditor({ dish, categories = [], onNewCategory, onRemoveImage, onRem
           <label className="dish-visible-toggle"><span><strong>Visible en la carta</strong><small>Podés ocultarlo temporalmente si se agota.</small></span><input type="checkbox" checked={draft.available} onChange={(event) => update("available", event.target.checked)} /><i /></label>
         </fieldset>
         <footer>
-          <span className="dish-save-status" role="status" aria-live="polite">{saveStatus}</span>
+          <span className="dish-save-status" role={saveError ? "alert" : "status"} aria-live="polite">{saveError || saveStatus}</span>
           <button className="secondary-button" type="button" onClick={close} disabled={saving}>Cancelar</button>
           <button className="primary-button" type="submit" disabled={saving}>{saving ? <SpinnerGap className="spin" size={17} /> : <Check size={17} />} {saving ? "Guardando…" : "Guardar plato"}</button>
         </footer>

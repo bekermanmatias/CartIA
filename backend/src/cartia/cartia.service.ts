@@ -141,7 +141,7 @@ export class CartiaService {
       ? await this.prisma.category.findFirst({ where: { id: input.categoryId, menuId: menu.id, archivedAt: null } })
       : await this.prisma.category.upsert({ where: { menuId_name: { menuId: menu.id, name: 'Sin categoría' } }, update: { archivedAt: null }, create: { menuId: menu.id, name: 'Sin categoría', sortOrder: 0 } });
     if (!category) throw new BadRequestException('Elegí una categoría válida para el plato.');
-    const rawPrice = Number.isFinite(input.priceCents) ? Math.trunc(input.priceCents!) : Number((input.price ?? '').replace(/\D/g, '')) * 100;
+    const rawPrice = typeof input.price === 'string' ? Number(input.price.replace(/\D/g, '')) * 100 : Number.isFinite(input.priceCents) ? Math.trunc(input.priceCents!) : 0;
     const priceCents = Number.isFinite(rawPrice) ? rawPrice : 0;
     if (priceCents <= 0) throw new BadRequestException('El precio debe ser mayor a cero.');
     const data = { name, description: input.detail?.trim() ?? '', priceCents, badge: input.badge?.trim() || null, categoryId: category.id, available: input.available !== false };

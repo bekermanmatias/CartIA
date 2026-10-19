@@ -41,6 +41,24 @@ describe('CartiaService order transitions', () => {
     await expect(service.saveDish('user-a', { name: 'Plato A', price: '$125', categoryId: 'category-a' }, 'location-a')).resolves.toMatchObject({ ok: true, dish: { databaseId: 'dish-a', categoryId: 'category-a', priceCents: 12500 } });
   });
 
+  it('persists edited fields and uses the edited price instead of stale cents', async () => {
+    (prisma as any).menu = { findFirstOrThrow: jest.fn().mockResolvedValue({ id: 'menu-a' }) };
+    (prisma as any).category = { findFirst: jest.fn().mockResolvedValue({ id: 'category-b', name: 'Postres' }) };
+    const saved = { id: 'dish-a', publicId: 'plato-a', name: 'Nuevo nombre', description: 'Nueva descripción', priceCents: 1890000, badge: 'Favorito', available: false, sortOrder: 0, archivedAt: null, category: { id: 'category-b', name: 'Postres' }, media: [] };
+    (prisma as any).dish = { findFirst: jest.fn().mockResolvedValue({ id: 'dish-a' }), update: jest.fn().mockResolvedValue(saved) };
+
+    const result = await service.saveDish('user-a', { databaseId: 'dish-a', name: saved.name, detail: saved.description, price: '$18.900', priceCents: 100, badge: saved.badge, categoryId: 'category-b', available: false }, 'location-a');
+
+    expect((prisma as any).dish.update).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'dish-a' }, data: { name: saved.name, description: saved.description, priceCents: 1890000, badge: 'Favorito', categoryId: 'category-b', available: false } }));
+    expect(result.dish).toMatchObject({ databaseId: 'dish-a', name: saved.name, detail: saved.description, price: '$18.900', priceCents: 1890000, badge: 'Favorito', categoryId: 'category-b', available: false });
+  });
+
+  it('rejects a cleared edited price even when the old cents are still present', async () => {
+    (prisma as any).menu = { findFirstOrThrow: jest.fn().mockResolvedValue({ id: 'menu-a' }) };
+    (prisma as any).category = { findFirst: jest.fn().mockResolvedValue({ id: 'category-a' }) };
+    await expect(service.saveDish('user-a', { databaseId: 'dish-a', name: 'Plato', price: '$', priceCents: 12500, categoryId: 'category-a' }, 'location-a')).rejects.toBeInstanceOf(BadRequestException);
+  });
+
   it('permanently deletes only a dish from the active menu and its stored files', async () => {
     (prisma as any).menu = { findFirstOrThrow: jest.fn().mockResolvedValue({ id: 'menu-a' }) };
     (prisma as any).dish = {

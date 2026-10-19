@@ -1,4 +1,4 @@
-const API_ENDPOINT = (import.meta.env.VITE_API_URL || "/api/v1").replace(/\/$/, "");
+const API_ENDPOINT = (import.meta.env?.VITE_API_URL || "/api/v1").replace(/\/$/, "");
 
 class ApiError extends Error {
   constructor(message, status, data) {
@@ -74,7 +74,12 @@ export const cartiaApi = {
   saveSettings: (serviceOptions, visualTheme, csrf) => request("settings", {
     method: "POST", csrf, body: { serviceOptions, visualTheme },
   }),
-  saveDish: (dish, csrf) => request("dishes/save", { method: "POST", csrf, body: dish }),
+  saveDish: (dish, csrf) => {
+    // The editable price is authoritative; priceCents belongs to the last server response.
+    const { priceCents, imageFile, videoFile, ...body } = dish;
+    if (typeof body.price !== "string") body.priceCents = priceCents;
+    return request("dishes/save", { method: "POST", csrf, body });
+  },
   archiveDish: (id, archive, csrf) => request("dishes/archive", { method: "POST", csrf, body: { id, archive } }),
   deleteDish: (id, csrf) => request("dishes/delete", { method: "POST", csrf, body: { id } }),
   reorderDishes: (ids, csrf) => request("dishes/reorder", { method: "POST", csrf, body: { ids } }),

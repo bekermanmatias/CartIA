@@ -453,7 +453,8 @@ try {
         $data = input();
         $name = trim((string) ($data['name'] ?? ''));
         if ($name === '') jsonResponse(['ok' => false, 'error' => 'El plato necesita un nombre.'], 422);
-        $priceCents = isset($data['priceCents']) ? max(0, (int) $data['priceCents']) : max(0, ((int) preg_replace('/\D/', '', (string) ($data['price'] ?? '0'))) * 100);
+        $priceCents = isset($data['price']) ? ((int) preg_replace('/\D/', '', (string) $data['price'])) * 100 : (int) ($data['priceCents'] ?? 0);
+        if ($priceCents <= 0) jsonResponse(['ok' => false, 'error' => 'El precio debe ser mayor a cero.'], 422);
         if (!empty($data['databaseId'])) {
             $statement = db()->prepare(
                 'UPDATE dishes SET name = ?, description = ?, price_cents = ?, badge = ?, category = ?, available = ? WHERE id = ? AND restaurant_id = ?'
@@ -474,7 +475,10 @@ try {
                 !empty($data['available']) ? 1 : 0, (int) $user['restaurant_id']]);
             $databaseId = (int) db()->lastInsertId();
         }
-        jsonResponse(['ok' => true, 'dish' => ['databaseId' => $databaseId, 'id' => $publicId]], empty($data['databaseId']) ? 201 : 200);
+        $catalog = restaurantPayload((int) $user['restaurant_id']);
+        $savedDish = array_values(array_filter($catalog['dishes'], static fn (array $dish): bool => $dish['databaseId'] === $databaseId));
+        if (!$savedDish) jsonResponse(['ok' => false, 'error' => 'El plato no pertenece a este restaurante.'], 404);
+        jsonResponse(['ok' => true, 'dish' => $savedDish[0]], empty($data['databaseId']) ? 201 : 200);
     }
 
     if ($route === 'videos/upload' && $method === 'POST') {
